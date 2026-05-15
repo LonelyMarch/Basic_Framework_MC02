@@ -25,9 +25,9 @@ typedef struct tmpgpio
     GPIO_PinState pin_state;    // 引脚状态,Set,Reset;not frequently used
     GPIO_EXTI_MODE_e exti_mode; // 外部中断模式 not frequently used
     uint16_t GPIO_Pin;          // 引脚号,
-    // 这些引脚是stm32f4xx_hal_gpio.h中定义的宏!!! 一定要注意
-    // 随便取个名字当临时声明
-    void (*gpio_model_callback)(struct tmpgpio *); // exti中断回调函数
+    // GPIO_Pin使用HAL GPIO_PIN_x宏,例如GPIO_PIN_0、GPIO_PIN_1
+    // EXTI中断回调函数,该函数会在HAL_GPIO_EXTI_Callback的ISR上下文中被调用
+    void (*gpio_model_callback)(struct tmpgpio *);
     void *id;                                      // 区分不同的GPIO实例
 
 } GPIOInstance;
@@ -42,9 +42,10 @@ typedef struct
     GPIO_PinState pin_state;    // 引脚状态,Set,Reset not frequently used
     GPIO_EXTI_MODE_e exti_mode; // 外部中断模式 not frequently used
     uint16_t GPIO_Pin;          // 引脚号,@note 这里的引脚号是GPIO_PIN_0,GPIO_PIN_1...
-    // 这些引脚是stm32f4xx_hal_gpio.h中定义的宏!!! 一定要注意
+    // GPIO_Pin使用HAL GPIO_PIN_x宏,例如GPIO_PIN_0、GPIO_PIN_1
 
-    void (*gpio_model_callback)(GPIOInstance *); // exti中断回调函数
+    // EXTI中断回调函数,该函数会在HAL_GPIO_EXTI_Callback的ISR上下文中被调用
+    void (*gpio_model_callback)(GPIOInstance *);
     void *id;                                    // 区分不同的GPIO实例
 
 } GPIO_Init_Config_s;
@@ -62,7 +63,7 @@ GPIOInstance *GPIORegister(GPIO_Init_Config_s *GPIO_config);
  *
  * @param _instance
  */
-void GPIOToggel(GPIOInstance *_instance);
+void GPIOToggle(GPIOInstance *_instance);
 
 /**
  * @brief 设置GPIO电平
