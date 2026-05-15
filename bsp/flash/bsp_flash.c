@@ -1,289 +1,381 @@
 #include "bsp_flash.h"
-#include "main.h"
-#include "string.h"
 
-static uint32_t ger_sector(uint32_t address);
+#include "bsp_log.h"
+#include "cmsis_os2.h"
+#include <string.h>
+
+static osMutexId_t bsp_flash_mutex = NULL;
+static uint32_t bsp_flash_last_error = 0U;
+
+static int8_t BSP_Flash_Lock(uint32_t timeout);
+static void BSP_Flash_Unlock(int8_t lock_state);
+static int8_t BSP_Flash_CheckRange(uint32_t offset, uint32_t size);
+static int8_t BSP_Flash_CheckAligned(uint32_t value, uint32_t align);
+static uint32_t BSP_Flash_OffsetToAddress(uint32_t offset);
+static uint32_t BSP_Flash_AddressToSector(uint32_t address);
+static int8_t BSP_Flash_CheckErased(uint32_t address, uint32_t size);
+static void BSP_Flash_InvalidateCache(uint32_t address, uint32_t size);
 
 /**
-  * @brief          erase flash
-  * @param[in]      address: flash address
-  * @param[in]      len: page num
-  * @retval         none
-  */
-/**
-  * @brief          擦除flash
-  * @param[in]      address: flash 地址
-  * @param[in]      len: 页数量
-  * @retval         none
-  */
-void flash_erase_address(uint32_t address, uint16_t len)
+ * @brief 初始化片上Flash BSP
+ *
+ * @note 本函数不擦除、不写入Flash。调度器运行后,互斥锁会在首次访问时创建。
+ */
+int8_t BSP_Flash_Init(void)
 {
-    FLASH_EraseInitTypeDef flash_erase;
-    uint32_t error;
-
-    flash_erase.Sector = ger_sector(address);
-    flash_erase.TypeErase = FLASH_TYPEERASE_SECTORS;
-    flash_erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
-    flash_erase.NbSectors = len;
-
-    HAL_FLASH_Unlock();
-    HAL_FLASHEx_Erase(&flash_erase, &error);
-    HAL_FLASH_Lock();
+    return BSP_FLASH_OK;
 }
 
-/**
-  * @brief          write data to one page of flash
-  * @param[in]      start_address: flash address
-  * @param[in]      buf: data point
-  * @param[in]      len: data num
-  * @retval         success 0, fail -1
-  */
-/**
-  * @brief          往一页flash写数据
-  * @param[in]      start_address: flash 地址
-  * @param[in]      buf: 数据指针
-  * @param[in]      len: 数据长度
-  * @retval         success 0, fail -1
-  */
-int8_t flash_write_single_address(uint32_t start_address, uint32_t *buf, uint32_t len)
+uint32_t BSP_Flash_GetUserStart(void)
 {
-    static uint32_t uw_address;
-    static uint32_t end_address;
-    static uint32_t *data_buf;
-    static uint32_t data_len;
+    return BSP_FLASH_USER_START;
+}
 
-    HAL_FLASH_Unlock();
+uint32_t BSP_Flash_GetUserSize(void)
+{
+    return BSP_FLASH_USER_SIZE;
+}
 
-    uw_address = start_address;
-    end_address = get_next_flash_address(start_address);
-    data_buf = buf;
-    data_len = 0;
+int8_t BSP_Flash_Read(uint32_t offset, void *buffer, uint32_t size)
+{
+    int8_t lock_state;
 
-    while (uw_address <= end_address)
+    if ((buffer == NULL) || (BSP_Flash_CheckRange(offset, size) != BSP_FLASH_OK))
     {
+        LOGERROR("[bsp_flash] read invalid param, offset = 0x%X, size = %u", offset, size);
+        return BSP_FLASH_ERROR_INVALID_PARAM;
+    }
 
-        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,uw_address, *data_buf) == HAL_OK)
+    if (size == 0U)
+    {
+        return BSP_FLASH_OK;
+    }
+
+    lock_state = BSP_Flash_Lock(osWaitForever);
+    if (lock_state < 0)
+    {
+        return lock_state;
+    }
+
+    memcpy(buffer, (const void *)BSP_Flash_OffsetToAddress(offset), size);
+    BSP_Flash_Unlock(lock_state);
+    return BSP_FLASH_OK;
+}
+
+int8_t BSP_Flash_Erase(uint32_t offset, uint32_t size)
+{
+    FLASH_EraseInitTypeDef erase_cfg;
+    uint32_t sector_error = 0xFFFFFFFFU;
+    uint32_t start_address;
+    uint32_t start_sector;
+    uint32_t sector_count;
+    int8_t lock_state;
+    int8_t status = BSP_FLASH_OK;
+
+    if ((BSP_Flash_CheckRange(offset, size) != BSP_FLASH_OK) ||
+        (BSP_Flash_CheckAligned(offset, BSP_FLASH_SECTOR_SIZE) != BSP_FLASH_OK) ||
+        (BSP_Flash_CheckAligned(size, BSP_FLASH_SECTOR_SIZE) != BSP_FLASH_OK))
+    {
+        LOGERROR("[bsp_flash] erase invalid param, offset = 0x%X, size = %u", offset, size);
+        return BSP_FLASH_ERROR_INVALID_PARAM;
+    }
+
+    if (size == 0U)
+    {
+        return BSP_FLASH_OK;
+    }
+
+    lock_state = BSP_Flash_Lock(osWaitForever);
+    if (lock_state < 0)
+    {
+        return lock_state;
+    }
+
+    start_address = BSP_Flash_OffsetToAddress(offset);
+    start_sector = BSP_Flash_AddressToSector(start_address);
+    sector_count = size / BSP_FLASH_SECTOR_SIZE;
+
+    memset(&erase_cfg, 0, sizeof(erase_cfg));
+    erase_cfg.TypeErase = FLASH_TYPEERASE_SECTORS;
+    erase_cfg.Banks = FLASH_BANK_1;
+    erase_cfg.Sector = start_sector;
+    erase_cfg.NbSectors = sector_count;
+    erase_cfg.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+
+    if (HAL_FLASH_Unlock() != HAL_OK)
+    {
+        bsp_flash_last_error = HAL_FLASH_GetError();
+        LOGERROR("[bsp_flash] unlock failed, error = 0x%X", bsp_flash_last_error);
+        BSP_Flash_Unlock(lock_state);
+        return BSP_FLASH_ERROR_LOCK;
+    }
+
+    if (HAL_FLASHEx_Erase(&erase_cfg, &sector_error) != HAL_OK)
+    {
+        bsp_flash_last_error = HAL_FLASH_GetError();
+        LOGERROR("[bsp_flash] erase failed, sector = %u, error = 0x%X", sector_error, bsp_flash_last_error);
+        status = BSP_FLASH_ERROR_ERASE;
+    }
+
+    if (HAL_FLASH_Lock() != HAL_OK)
+    {
+        bsp_flash_last_error = HAL_FLASH_GetError();
+        LOGERROR("[bsp_flash] lock failed, error = 0x%X", bsp_flash_last_error);
+        status = BSP_FLASH_ERROR_LOCK;
+    }
+
+    if (status == BSP_FLASH_OK)
+    {
+        BSP_Flash_InvalidateCache(start_address, size);
+    }
+
+    BSP_Flash_Unlock(lock_state);
+    return status;
+}
+
+int8_t BSP_Flash_EraseAll(void)
+{
+    return BSP_Flash_Erase(0U, BSP_FLASH_USER_SIZE);
+}
+
+int8_t BSP_Flash_Write(uint32_t offset, const void *buffer, uint32_t size)
+{
+    uint32_t flash_word[FLASH_NB_32BITWORD_IN_FLASHWORD];
+    const uint8_t *write_data = (const uint8_t *)buffer;
+    uint32_t current_offset;
+    uint32_t current_address;
+    uint32_t remain_size;
+    uint32_t chunk_size;
+    int8_t lock_state;
+    int8_t status = BSP_FLASH_OK;
+
+    if ((buffer == NULL) || (BSP_Flash_CheckRange(offset, size) != BSP_FLASH_OK) ||
+        (BSP_Flash_CheckAligned(offset, BSP_FLASH_PROGRAM_UNIT) != BSP_FLASH_OK))
+    {
+        LOGERROR("[bsp_flash] write invalid param, offset = 0x%X, size = %u", offset, size);
+        return BSP_FLASH_ERROR_INVALID_PARAM;
+    }
+
+    if (size == 0U)
+    {
+        return BSP_FLASH_OK;
+    }
+
+    lock_state = BSP_Flash_Lock(osWaitForever);
+    if (lock_state < 0)
+    {
+        return lock_state;
+    }
+
+    current_offset = offset;
+    remain_size = size;
+
+    if (HAL_FLASH_Unlock() != HAL_OK)
+    {
+        bsp_flash_last_error = HAL_FLASH_GetError();
+        LOGERROR("[bsp_flash] unlock failed, error = 0x%X", bsp_flash_last_error);
+        BSP_Flash_Unlock(lock_state);
+        return BSP_FLASH_ERROR_LOCK;
+    }
+
+    while (remain_size > 0U)
+    {
+        current_address = BSP_Flash_OffsetToAddress(current_offset);
+        chunk_size = (remain_size > BSP_FLASH_PROGRAM_UNIT) ? BSP_FLASH_PROGRAM_UNIT : remain_size;
+
+        /*
+         * STM32H723一次写入一个256bit flash word。即使最后一包不足32字节,
+         * HAL也会写满32字节,因此这里用0xFF补齐,并要求整组目标flash word均为擦除态。
+         */
+        BSP_Flash_InvalidateCache(current_address, BSP_FLASH_PROGRAM_UNIT);
+        if (BSP_Flash_CheckErased(current_address, BSP_FLASH_PROGRAM_UNIT) != BSP_FLASH_OK)
         {
-            uw_address += 4;
-            data_buf++;
-            data_len++;
-            if (data_len == len)
-            {
-                break;
-            }
+            LOGERROR("[bsp_flash] target is not erased, address = 0x%X", current_address);
+            status = BSP_FLASH_ERROR_NOT_ERASED;
+            break;
         }
-        else
+
+        memset(flash_word, 0xFF, sizeof(flash_word));
+        memcpy(flash_word, write_data, chunk_size);
+
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_FLASHWORD,
+                              current_address,
+                              (uint32_t)(uintptr_t)flash_word) != HAL_OK)
         {
-            HAL_FLASH_Lock();
-            return -1;
+            bsp_flash_last_error = HAL_FLASH_GetError();
+            LOGERROR("[bsp_flash] program failed, address = 0x%X, error = 0x%X",
+                     current_address, bsp_flash_last_error);
+            status = BSP_FLASH_ERROR_PROGRAM;
+            break;
         }
-    }
 
-    HAL_FLASH_Lock();
-    return 0;
-}
-
-/**
-  * @brief          write data to some pages of flash
-  * @param[in]      start_address: flash start address
-  * @param[in]      end_address: flash end address
-  * @param[in]      buf: data point
-  * @param[in]      len: data num
-  * @retval         success 0, fail -1
-  */
-/**
-  * @brief          往几页flash写数据
-  * @param[in]      start_address: flash 开始地址
-  * @param[in]      end_address: flash 结束地址
-  * @param[in]      buf: 数据指针
-  * @param[in]      len: 数据长度
-  * @retval         success 0, fail -1
-  */
-int8_t flash_write_muli_address(uint32_t start_address, uint32_t end_address, uint32_t *buf, uint32_t len)
-{
-    uint32_t uw_address = 0;
-    uint32_t *data_buf;
-    uint32_t data_len;
-
-    HAL_FLASH_Unlock();
-
-    uw_address = start_address;
-    data_buf = buf;
-    data_len = 0;
-    while (uw_address <= end_address)
-    {
-        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,uw_address, *data_buf) == HAL_OK)
+        BSP_Flash_InvalidateCache(current_address, BSP_FLASH_PROGRAM_UNIT);
+        if (memcmp((const void *)current_address, flash_word, sizeof(flash_word)) != 0)
         {
-            uw_address += 4;
-            data_buf++;
-            data_len++;
-            if (data_len == len)
-            {
-                break;
-            }
+            LOGERROR("[bsp_flash] verify failed, address = 0x%X", current_address);
+            status = BSP_FLASH_ERROR_VERIFY;
+            break;
         }
-        else
+
+        current_offset += chunk_size;
+        write_data += chunk_size;
+        remain_size -= chunk_size;
+    }
+
+    if (HAL_FLASH_Lock() != HAL_OK)
+    {
+        bsp_flash_last_error = HAL_FLASH_GetError();
+        LOGERROR("[bsp_flash] lock failed, error = 0x%X", bsp_flash_last_error);
+        status = BSP_FLASH_ERROR_LOCK;
+    }
+
+    if (status == BSP_FLASH_OK)
+    {
+        BSP_Flash_InvalidateCache(BSP_Flash_OffsetToAddress(offset), size);
+    }
+
+    BSP_Flash_Unlock(lock_state);
+    return status;
+}
+
+uint32_t BSP_Flash_GetLastError(void)
+{
+    return bsp_flash_last_error;
+}
+
+static int8_t BSP_Flash_Lock(uint32_t timeout)
+{
+    osKernelState_t kernel_state;
+    const osMutexAttr_t mutex_attr = {
+        .name = "bsp_flash",
+        .attr_bits = osMutexRecursive | osMutexPrioInherit,
+    };
+
+    if (__get_IPSR() != 0U)
+    {
+        LOGERROR("[bsp_flash] cannot access flash in ISR");
+        return BSP_FLASH_ERROR_IN_ISR;
+    }
+
+    kernel_state = osKernelGetState();
+    if (kernel_state != osKernelRunning)
+    {
+        return 0;
+    }
+
+    if (bsp_flash_mutex == NULL)
+    {
+        int32_t kernel_lock = osKernelLock();
+        if (kernel_lock < 0)
         {
-            HAL_FLASH_Lock();
-            return -1;
+            LOGERROR("[bsp_flash] kernel lock failed");
+            return BSP_FLASH_ERROR_MUTEX;
+        }
+
+        if (bsp_flash_mutex == NULL)
+        {
+            bsp_flash_mutex = osMutexNew(&mutex_attr);
+        }
+
+        if (osKernelRestoreLock(kernel_lock) < 0)
+        {
+            LOGERROR("[bsp_flash] kernel restore lock failed");
+            return BSP_FLASH_ERROR_MUTEX;
+        }
+
+        if (bsp_flash_mutex == NULL)
+        {
+            LOGERROR("[bsp_flash] mutex create failed");
+            return BSP_FLASH_ERROR_MUTEX;
         }
     }
 
-    HAL_FLASH_Lock(); 
-    return 0;
+    if (osMutexAcquire(bsp_flash_mutex, timeout) != osOK)
+    {
+        LOGERROR("[bsp_flash] mutex acquire timeout");
+        return BSP_FLASH_ERROR_MUTEX;
+    }
+
+    return 1;
 }
 
-
-/**
-  * @brief          read data for flash
-  * @param[in]      address: flash address
-  * @param[out]     buf: data point
-  * @param[in]      len: data num
-  * @retval         none
-  */
-/**
-  * @brief          从flash读数据
-  * @param[in]      start_address: flash 地址
-  * @param[out]     buf: 数据指针
-  * @param[in]      len: 数据长度
-  * @retval         none
-  */
-void flash_read(uint32_t address, uint32_t *buf, uint32_t len)
+static void BSP_Flash_Unlock(int8_t lock_state)
 {
-    memcpy(buf, (void*)address, len *4);
+    if ((lock_state > 0) && (bsp_flash_mutex != NULL))
+    {
+        if (osMutexRelease(bsp_flash_mutex) != osOK)
+        {
+            LOGERROR("[bsp_flash] mutex release failed");
+        }
+    }
 }
 
-
-/**
-  * @brief          get the sector number of flash
-  * @param[in]      address: flash address
-  * @retval         sector number
-  */
-/**
-  * @brief          获取flash的sector号
-  * @param[in]      address: flash 地址
-  * @retval         sector号
-  */
-static uint32_t ger_sector(uint32_t address)
+static int8_t BSP_Flash_CheckRange(uint32_t offset, uint32_t size)
 {
-    uint32_t sector = 0;
-    if ((address < ADDR_FLASH_SECTOR_1) && (address >= ADDR_FLASH_SECTOR_0))
+    if (size == 0U)
     {
-        sector = FLASH_SECTOR_0;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_2) && (address >= ADDR_FLASH_SECTOR_1))
-    {
-        sector = FLASH_SECTOR_1;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_3) && (address >= ADDR_FLASH_SECTOR_2))
-    {
-        sector = FLASH_SECTOR_2;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_4) && (address >= ADDR_FLASH_SECTOR_3))
-    {
-        sector = FLASH_SECTOR_3;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_5) && (address >= ADDR_FLASH_SECTOR_4))
-    {
-        sector = FLASH_SECTOR_4;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_6) && (address >= ADDR_FLASH_SECTOR_5))
-    {
-        sector = FLASH_SECTOR_5;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_7) && (address >= ADDR_FLASH_SECTOR_6))
-    {
-        sector = FLASH_SECTOR_6;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_8) && (address >= ADDR_FLASH_SECTOR_7))
-    {
-        sector = FLASH_SECTOR_7;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_9) && (address >= ADDR_FLASH_SECTOR_8))
-    {
-        sector = FLASH_SECTOR_8;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_10) && (address >= ADDR_FLASH_SECTOR_9))
-    {
-        sector = FLASH_SECTOR_9;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_11) && (address >= ADDR_FLASH_SECTOR_10))
-    {
-        sector = FLASH_SECTOR_10;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_12) && (address >= ADDR_FLASH_SECTOR_11))
-    {
-        sector = FLASH_SECTOR_11;
-    }
-    else
-    {
-        sector = FLASH_SECTOR_11;
+        return BSP_FLASH_OK;
     }
 
-    return sector;
+    if ((offset >= BSP_FLASH_USER_SIZE) || (size > (BSP_FLASH_USER_SIZE - offset)))
+    {
+        return BSP_FLASH_ERROR_INVALID_PARAM;
+    }
+
+    return BSP_FLASH_OK;
 }
 
-/**
-  * @brief          get the next page flash address
-  * @param[in]      address: flash address
-  * @retval         next page flash address
-  */
-/**
-  * @brief          获取下一页flash地址
-  * @param[in]      address: flash 地址
-  * @retval         下一页flash地址
-  */
-uint32_t get_next_flash_address(uint32_t address)
+static int8_t BSP_Flash_CheckAligned(uint32_t value, uint32_t align)
 {
-    uint32_t sector = 0;
+    if ((align == 0U) || ((value % align) != 0U))
+    {
+        return BSP_FLASH_ERROR_INVALID_PARAM;
+    }
 
-    if ((address < ADDR_FLASH_SECTOR_1) && (address >= ADDR_FLASH_SECTOR_0))
+    return BSP_FLASH_OK;
+}
+
+static uint32_t BSP_Flash_OffsetToAddress(uint32_t offset)
+{
+    return BSP_FLASH_USER_START + offset;
+}
+
+static uint32_t BSP_Flash_AddressToSector(uint32_t address)
+{
+    return (address - FLASH_BANK1_BASE) / BSP_FLASH_SECTOR_SIZE;
+}
+
+static int8_t BSP_Flash_CheckErased(uint32_t address, uint32_t size)
+{
+    const uint8_t *flash_data = (const uint8_t *)address;
+    uint32_t i;
+
+    for (i = 0U; i < size; i++)
     {
-        sector = ADDR_FLASH_SECTOR_1;
+        if (flash_data[i] != 0xFFU)
+        {
+            return BSP_FLASH_ERROR_NOT_ERASED;
+        }
     }
-    else if ((address < ADDR_FLASH_SECTOR_2) && (address >= ADDR_FLASH_SECTOR_1))
+
+    return BSP_FLASH_OK;
+}
+
+static void BSP_Flash_InvalidateCache(uint32_t address, uint32_t size)
+{
+    uint32_t aligned_address;
+    uint32_t end_address;
+    int32_t aligned_size;
+
+    if (size == 0U)
     {
-        sector = ADDR_FLASH_SECTOR_2;
+        return;
     }
-    else if ((address < ADDR_FLASH_SECTOR_3) && (address >= ADDR_FLASH_SECTOR_2))
-    {
-        sector = ADDR_FLASH_SECTOR_3;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_4) && (address >= ADDR_FLASH_SECTOR_3))
-    {
-        sector = ADDR_FLASH_SECTOR_4;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_5) && (address >= ADDR_FLASH_SECTOR_4))
-    {
-        sector = ADDR_FLASH_SECTOR_5;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_6) && (address >= ADDR_FLASH_SECTOR_5))
-    {
-        sector = ADDR_FLASH_SECTOR_6;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_7) && (address >= ADDR_FLASH_SECTOR_6))
-    {
-        sector = ADDR_FLASH_SECTOR_7;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_8) && (address >= ADDR_FLASH_SECTOR_7))
-    {
-        sector = ADDR_FLASH_SECTOR_8;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_9) && (address >= ADDR_FLASH_SECTOR_8))
-    {
-        sector = ADDR_FLASH_SECTOR_9;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_10) && (address >= ADDR_FLASH_SECTOR_9))
-    {
-        sector = ADDR_FLASH_SECTOR_10;
-    }
-    else if ((address < ADDR_FLASH_SECTOR_11) && (address >= ADDR_FLASH_SECTOR_10))
-    {
-        sector = ADDR_FLASH_SECTOR_11;
-    }
-    else /*(address < FLASH_END_ADDR) && (address >= ADDR_FLASH_SECTOR_23))*/
-    {
-        sector = FLASH_END_ADDR;
-    }
-    return sector;
+
+    aligned_address = address & ~31UL;
+    end_address = (address + size + 31UL) & ~31UL;
+    aligned_size = (int32_t)(end_address - aligned_address);
+
+    SCB_InvalidateDCache_by_Addr((uint32_t *)(uintptr_t)aligned_address, aligned_size);
+    SCB_InvalidateICache();
 }

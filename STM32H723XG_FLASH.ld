@@ -8,6 +8,7 @@
 **
 **  Abstract    : Linker script for STM32H723VGTx series
 **                1024Kbytes FLASH and 560Kbytes RAM
+**                Last 128Kbytes FLASH is reserved as USER_FLASH
 **
 **                Set heap size, stack size and stack location according
 **                to application requirements.
@@ -60,8 +61,13 @@ RAM_D1 (xrw)      : ORIGIN = 0x24000000, LENGTH = 320K
 RAM_D2 (xrw)      : ORIGIN = 0x30000000, LENGTH = 32K
 RAM_D3 (xrw)      : ORIGIN = 0x38000000, LENGTH = 16K
 ITCMRAM (xrw)      : ORIGIN = 0x00000000, LENGTH = 64K
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 1024K
+FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 896K
+USER_FLASH (rx) : ORIGIN = 0x80E0000, LENGTH = 128K
 }
+
+/* User flash area reserved for bsp/flash. Keep it outside normal program sections. */
+PROVIDE(__user_flash_start__ = ORIGIN(USER_FLASH));
+PROVIDE(__user_flash_end__ = ORIGIN(USER_FLASH) + LENGTH(USER_FLASH));
 
 /* Highest address of the user mode stack */
 _estack = ORIGIN(DTCMRAM) + LENGTH(DTCMRAM);    /* end of RAM */
