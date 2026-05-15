@@ -20,7 +20,7 @@
 #define hcan2  hfdcan2
 #define hcan3  hfdcan3
 
-#define CAN_MX_REGISTER_CNT 16     // 这个数量取决于CAN总线的负载
+#define CAN_MX_REGISTER_CNT 32     // 所有FDCAN外设共用的CAN实例注册上限
 #define MX_CAN_FILTER_CNT (3 * 14) // 最多可以使用的CAN过滤器数量,目前远不会用到这么多
 #define DEVICE_CAN_CNT 3           //H723VG有3个FDCAN
 

@@ -34,34 +34,42 @@ static void CANAddFilter(CANInstance *_instance)
 {
 
 #ifdef FDCAN
-	static uint8_t can1_filter_idx = 0, can2_filter_idx = 0 , can3_filter_idx = 0;
-	//检查是否超出过滤器设定数量上限
-	if(can1_filter_idx > hfdcan1.Init.StdFiltersNbr || can2_filter_idx>hfdcan2.Init.StdFiltersNbr || can3_filter_idx > hfdcan3.Init.StdFiltersNbr)
-	{
-		while(1)
-		{
-			//报错
-		}
-	}
-	uint8_t *filter_idx_p;
+	static uint8_t can1_filter_idx = 0, can2_filter_idx = 0, can3_filter_idx = 0;
+	uint8_t *filter_idx_p = NULL;
+	uint8_t can_idx = 0;
 
-	if(_instance->can_handle==&hfdcan1)
+	if (_instance->can_handle == &hfdcan1)
 	{
-		filter_idx_p=&can1_filter_idx;
+		filter_idx_p = &can1_filter_idx;
+		can_idx = 1;
 	}
-	else if(_instance->can_handle==&hfdcan2)
+	else if (_instance->can_handle == &hfdcan2)
 	{
-		filter_idx_p=&can2_filter_idx;
+		filter_idx_p = &can2_filter_idx;
+		can_idx = 2;
 	}
-	else if(_instance->can_handle==&hfdcan3)
+	else if (_instance->can_handle == &hfdcan3)
 	{
-		filter_idx_p=&can3_filter_idx;
+		filter_idx_p = &can3_filter_idx;
+		can_idx = 3;
 	}
 	else
 	{
-		while(1)
+		LOGERROR("[bsp_can] invalid FDCAN handle, tx_id:0x%x, rx_id:0x%x",
+		         (unsigned int)_instance->tx_id, (unsigned int)_instance->rx_id);
+		while (1)
 		{
-			//报错
+		}
+	}
+
+	// 只检查当前FDCAN实例的过滤器数量；StdFiltersNbr为数量，合法索引范围是0到StdFiltersNbr - 1。
+	if (*filter_idx_p >= _instance->can_handle->Init.StdFiltersNbr)
+	{
+		LOGERROR("[bsp_can] FDCAN filter exceeded, used:%u, limit:%u, tx_id:0x%x, rx_id:0x%x",
+		         (unsigned int)*filter_idx_p, (unsigned int)_instance->can_handle->Init.StdFiltersNbr,
+		         (unsigned int)_instance->tx_id, (unsigned int)_instance->rx_id);
+		while (1)
+		{
 		}
 	}
 
@@ -69,14 +77,22 @@ static void CANAddFilter(CANInstance *_instance)
 	fdcan_filter_conf.FilterIndex=(*filter_idx_p)++;
 	//使用单个ID模式
 	fdcan_filter_conf.FilterType=FDCAN_FILTER_DUAL;
-	fdcan_filter_conf.FilterConfig=(_instance->tx_id & 1) ? FDCAN_FILTER_TO_RXFIFO0 : FDCAN_FILTER_TO_RXFIFO1;//奇数id的模块会被分配到FIFO0,偶数id的模块会被分配到FIFO1
+	fdcan_filter_conf.FilterConfig=(_instance->rx_id & 1) ? FDCAN_FILTER_TO_RXFIFO0 : FDCAN_FILTER_TO_RXFIFO1;//按接收ID分配FIFO,奇数rx_id进入FIFO0,偶数rx_id进入FIFO1
 	fdcan_filter_conf.FilterID1=_instance->rx_id;
 	fdcan_filter_conf.FilterID2=_instance->rx_id;
 	fdcan_filter_conf.IdType=FDCAN_STANDARD_ID;
 	fdcan_filter_conf.IsCalibrationMsg=0;
 	//fdcan_filter_conf.RxBufferIndex=0;
 
-	HAL_FDCAN_ConfigFilter(_instance->can_handle, &fdcan_filter_conf);
+	if (HAL_FDCAN_ConfigFilter(_instance->can_handle, &fdcan_filter_conf) != HAL_OK)
+	{
+		LOGERROR("[bsp_can] FDCAN%u config filter failed, filter:%u, tx_id:0x%x, rx_id:0x%x",
+		         (unsigned int)can_idx, (unsigned int)fdcan_filter_conf.FilterIndex,
+		         (unsigned int)_instance->tx_id, (unsigned int)_instance->rx_id);
+		while (1)
+		{
+		}
+	}
 
 #else
 	CAN_FilterTypeDef can_filter_conf;
@@ -94,6 +110,58 @@ static void CANAddFilter(CANInstance *_instance)
 #endif
 
 }
+
+#ifdef FDCAN
+/**
+ * @brief 启动单路FDCAN服务,并检查每一步HAL配置结果
+ *
+ * @param hfdcan FDCAN句柄
+ * @param can_idx FDCAN编号,仅用于日志输出
+ * @param rx_active_its 需要激活的接收中断
+ */
+static void CANStartFDCANService(FDCAN_HandleTypeDef *hfdcan, uint8_t can_idx, uint32_t rx_active_its)
+{
+	if (HAL_FDCAN_ConfigRxFifoOverwrite(hfdcan, FDCAN_RX_FIFO0, FDCAN_RX_FIFO_OVERWRITE) != HAL_OK)
+	{
+		LOGERROR("[bsp_can] FDCAN%u config RX FIFO0 overwrite failed", (unsigned int)can_idx);
+		while (1)
+		{
+		}
+	}
+
+	if (HAL_FDCAN_ConfigRxFifoOverwrite(hfdcan, FDCAN_RX_FIFO1, FDCAN_RX_FIFO_OVERWRITE) != HAL_OK)
+	{
+		LOGERROR("[bsp_can] FDCAN%u config RX FIFO1 overwrite failed", (unsigned int)can_idx);
+		while (1)
+		{
+		}
+	}
+
+	if (HAL_FDCAN_ConfigGlobalFilter(hfdcan, FDCAN_REJECT, FDCAN_REJECT, FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK)
+	{
+		LOGERROR("[bsp_can] FDCAN%u config global filter failed", (unsigned int)can_idx);
+		while (1)
+		{
+		}
+	}
+
+	if (HAL_FDCAN_Start(hfdcan) != HAL_OK)
+	{
+		LOGERROR("[bsp_can] FDCAN%u start failed", (unsigned int)can_idx);
+		while (1)
+		{
+		}
+	}
+
+	if (HAL_FDCAN_ActivateNotification(hfdcan, rx_active_its, 0) != HAL_OK)
+	{
+		LOGERROR("[bsp_can] FDCAN%u activate notification failed", (unsigned int)can_idx);
+		while (1)
+		{
+		}
+	}
+}
+#endif
 
 /**
  * @brief 在第一个CAN实例初始化的时候会自动调用此函数,启动CAN服务
@@ -114,24 +182,9 @@ void CANServiceInit()
 
 
 	//HAL_FDCAN_ConfigClockCalibration()
-	HAL_FDCAN_ConfigRxFifoOverwrite(&hfdcan1,FDCAN_RX_FIFO0,FDCAN_RX_FIFO_OVERWRITE);
-	HAL_FDCAN_ConfigRxFifoOverwrite(&hfdcan1,FDCAN_RX_FIFO1,FDCAN_RX_FIFO_OVERWRITE);
-	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_REJECT, FDCAN_REJECT, FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);//全局过滤器设置
-	HAL_FDCAN_Start(&hfdcan1);
-	HAL_FDCAN_ActivateNotification(&hfdcan1,FDCAN_RXActiveITs, 0);
-
-	HAL_FDCAN_ConfigRxFifoOverwrite(&hfdcan2,FDCAN_RX_FIFO0,FDCAN_RX_FIFO_OVERWRITE);
-	HAL_FDCAN_ConfigRxFifoOverwrite(&hfdcan2,FDCAN_RX_FIFO1,FDCAN_RX_FIFO_OVERWRITE);
-	HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_REJECT, FDCAN_REJECT, FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
-	HAL_FDCAN_Start(&hfdcan2);
-	HAL_FDCAN_ActivateNotification(&hfdcan2,FDCAN_RXActiveITs, 0);
-
-
-	HAL_FDCAN_ConfigRxFifoOverwrite(&hfdcan3,FDCAN_RX_FIFO0,FDCAN_RX_FIFO_OVERWRITE);
-	HAL_FDCAN_ConfigRxFifoOverwrite(&hfdcan3,FDCAN_RX_FIFO1,FDCAN_RX_FIFO_OVERWRITE);
-	HAL_FDCAN_ConfigGlobalFilter(&hfdcan3, FDCAN_REJECT, FDCAN_REJECT, FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
-	HAL_FDCAN_Start(&hfdcan3);
-	HAL_FDCAN_ActivateNotification(&hfdcan3,FDCAN_RXActiveITs, 0);
+	CANStartFDCANService(&hfdcan1, 1, FDCAN_RXActiveITs);
+	CANStartFDCANService(&hfdcan2, 2, FDCAN_RXActiveITs);
+	CANStartFDCANService(&hfdcan3, 3, FDCAN_RXActiveITs);
 
 
 #else
@@ -259,6 +312,40 @@ void CANSetDLC(CANInstance *_instance, uint8_t length)
 //对于FDCAN，回调函数和处理方式完全不同，因此直接用两套逻辑处理
 #ifdef FDCAN
 /**
+ * @brief 将HAL FDCAN的DLC宏转换为实际字节数
+ *
+ * @param dlc HAL接收头中的DataLength字段
+ * @return uint8_t 实际数据长度,当前Classic CAN仅支持0到8字节
+ */
+static uint8_t FDCANDecodeDLC(uint32_t dlc)
+{
+	switch (dlc)
+	{
+	case FDCAN_DLC_BYTES_0:
+		return 0;
+	case FDCAN_DLC_BYTES_1:
+		return 1;
+	case FDCAN_DLC_BYTES_2:
+		return 2;
+	case FDCAN_DLC_BYTES_3:
+		return 3;
+	case FDCAN_DLC_BYTES_4:
+		return 4;
+	case FDCAN_DLC_BYTES_5:
+		return 5;
+	case FDCAN_DLC_BYTES_6:
+		return 6;
+	case FDCAN_DLC_BYTES_7:
+		return 7;
+	case FDCAN_DLC_BYTES_8:
+		return 8;
+	default:
+		LOGERROR("[bsp_can] invalid FDCAN DLC:0x%x", (unsigned int)dlc);
+		return 0;
+	}
+}
+
+/**
  * @brief 此函数会被下面两个函数调用,用于处理FIFO0和FIFO1溢出中断(说明收到了新的数据)
  *        所有的实例都会被遍历,找到can_handle和rx_id相等的实例时,调用该实例的回调函数
  *
@@ -268,20 +355,16 @@ void CANSetDLC(CANInstance *_instance, uint8_t length)
 static void FDCANFIFOxCallback(FDCAN_HandleTypeDef *_hfdcan, uint32_t fifox)
 {
     static FDCAN_RxHeaderTypeDef rxconf; // 同上
-	static uint16_t DataLength = 0;
     static uint8_t fdcan_rx_buff[8];
+    uint8_t data_length;
     while (HAL_FDCAN_GetRxFifoFillLevel(_hfdcan, fifox)) // FIFO不为空,有可能在其他中断时有多帧数据进入
     {
-        HAL_FDCAN_GetRxMessage(_hfdcan, fifox, &rxconf, fdcan_rx_buff); // 从FIFO中获取数据
-		//解析数据长度，@Todo 此处在用新版本重新生成后可能得修改，DataLength可能不需要右移，具体情况具体看	！
-		if(((rxconf.DataLength >> 16) & 0xF)>=0 && ((rxconf.DataLength >> 16) & 0xF)<=8)
-		{
-			DataLength=(rxconf.DataLength >> 16) & 0xF; // 保存接收到的数据长度
-		}
-		else
-		{
-			DataLength=0;
-		}
+        if (HAL_FDCAN_GetRxMessage(_hfdcan, fifox, &rxconf, fdcan_rx_buff) != HAL_OK) // 从FIFO中获取数据
+        {
+        	LOGERROR("[bsp_can] FDCAN get rx message failed, fifo:%u", (unsigned int)fifox);
+        	break;
+        }
+        data_length = FDCANDecodeDLC(rxconf.DataLength); // 将HAL DLC宏转换为实际接收字节数
         if(rxconf.RxFrameType==FDCAN_DATA_FRAME && rxconf.IdType==FDCAN_STANDARD_ID)
         {
         	for (size_t i = 0; i < idx; ++i)
@@ -291,11 +374,11 @@ static void FDCANFIFOxCallback(FDCAN_HandleTypeDef *_hfdcan, uint32_t fifox)
 				{
 					if (can_instance[i]->can_module_callback != NULL) // 回调函数不为空就调用
 					{
-						can_instance[i]->rx_len = DataLength;               // 保存接收到的数据长度
+						can_instance[i]->rx_len = data_length;               // 保存接收到的数据长度
 						memcpy(can_instance[i]->rx_buff, fdcan_rx_buff, can_instance[i]->rx_len); // 消息拷贝到对应实例
 						can_instance[i]->can_module_callback(can_instance[i]);     // 触发回调进行数据解析和处理
 					}
-					return;
+					break; // 当前帧已找到归属实例,只退出实例查找循环,继续处理FIFO中的后续帧
 				}
 			}
         }
