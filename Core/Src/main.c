@@ -56,12 +56,12 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#define W25Qxx_NumByteToTest   	32*1024					// 测试数据长度：32K
+#define QSPI_FLASH_NUM_BYTE_TO_TEST    (32U * 1024U)      // 测试数据长度: 32K
 
-int32_t OSPI_Status ; 		 // 状态标志位
+int32_t qspi_flash_status;     // 状态标志位
 
-uint8_t  W25Qxx_WriteBuffer[W25Qxx_NumByteToTest];		// 写数据缓冲区
-uint8_t  W25Qxx_ReadBuffer[W25Qxx_NumByteToTest];		// 读数据缓冲区
+uint8_t qspi_flash_write_buffer[QSPI_FLASH_NUM_BYTE_TO_TEST];  // 写数据缓冲区
+uint8_t qspi_flash_read_buffer[QSPI_FLASH_NUM_BYTE_TO_TEST];   // 读数据缓冲区
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/

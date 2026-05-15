@@ -63,6 +63,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     bsp/can/bsp_can.c
     bsp/usart/bsp_usart.c
     bsp/log/bsp_log.c
+    bsp/qspi_flash/bsp_qspi_flash.c
     bsp/bsp_tools.c
 
     modules/algorithm/controller.c
@@ -119,6 +120,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     bsp/spi
     bsp/iic
     bsp/log
+    bsp/qspi_flash
     bsp/pwm
     bsp
 
