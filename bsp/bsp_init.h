@@ -3,6 +3,7 @@
 
 #include "bsp_log.h"
 #include "bsp_dwt.h"
+#include "tim.h"
 //#include "bsp_usb.h"
 
 /**
@@ -14,10 +15,16 @@
 // 
 void BSPInit()
 {
-    DWT_Init(480);
+    // DWT按CPU内核时钟计数,这里使用SystemCoreClock换算MHz,不要使用HCLK
+    DWT_Init(SystemCoreClock / 1000000U);
     BSPLogInit();
+    // 启动TIM6周期中断,每1s刷新一次DWT时间轴,避免CYCCNT长时间未读取导致溢出漏计
+    if (HAL_TIM_Base_Start_IT(&htim6) != HAL_OK)
+    {
+        LOGERROR("[bsp_init] TIM6 start failed");
+        Error_Handler();
+    }
 }
 
 
 #endif // !BSP_INIT_h
-

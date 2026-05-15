@@ -35,6 +35,7 @@
 /* USER CODE BEGIN Includes */
 #include "robot.h"
 #include "bsp_log.h"
+#include "bsp_dwt.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -129,6 +130,7 @@ int main(void)
   MX_UART8_Init();
   MX_UART9_Init();
   MX_I2C2_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
   RobotInit(); // 唯一的初始化入口
   LOGINFO("[main] SystemInit() and RobotInit() done");
@@ -268,6 +270,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
+  if (htim->Instance == TIM6)
+  {
+    // TIM6每1s调用一次DWT,保证CYCCNT溢出能被及时记录
+    DWT_SysTimeUpdate();
+  }
 
   /* USER CODE END Callback 1 */
 }

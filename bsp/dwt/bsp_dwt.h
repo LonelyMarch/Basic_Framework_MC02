@@ -40,9 +40,9 @@ typedef struct
     } while (0)
 
 /**
- * @brief 初始化DWT,传入参数为CPU频率,单位MHz
+ * @brief 初始化DWT,传入参数为CPU内核频率,单位MHz
  *
- * @param CPU_Freq_mHz c板为168MHz,A板为180MHz
+ * @param CPU_Freq_mHz CPU内核频率,DWT CYCCNT按CPU cycle计数
  */
 void DWT_Init(uint32_t CPU_Freq_mHz);
 
@@ -93,8 +93,8 @@ uint64_t DWT_GetTimeline_us(void);
 void DWT_Delay(float Delay);
 
 /**
- * @brief DWT更新时间轴函数,会被三个timeline函数调用
- * @attention 如果长时间不调用timeline函数,则需要手动调用该函数更新时间轴,否则CYCCNT溢出后定时和时间轴不准确
+ * @brief DWT时间轴维护函数,用于刷新CYCCNT溢出计数
+ * @attention 如果长时间不调用DWT相关接口,则需要周期性调用该函数,否则CYCCNT溢出后长时间轴不准确
  */
 void DWT_SysTimeUpdate(void);
 
