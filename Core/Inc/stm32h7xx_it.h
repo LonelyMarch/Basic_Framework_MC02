@@ -64,6 +64,7 @@ void FDCAN2_IT0_IRQHandler(void);
 void FDCAN1_IT1_IRQHandler(void);
 void FDCAN2_IT1_IRQHandler(void);
 void I2C2_EV_IRQHandler(void);
+void I2C2_ER_IRQHandler(void);
 void USART1_IRQHandler(void);
 void USART2_IRQHandler(void);
 void USART3_IRQHandler(void);
