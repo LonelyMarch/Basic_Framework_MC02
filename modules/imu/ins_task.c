@@ -16,6 +16,7 @@
 #include "QuaternionEKF.h"
 #include "spi.h"
 #include "tim.h"
+#include "bsp_pwm.h"
 #include "user_lib.h"
 #include "general_def.h"
 #include "master_process.h"
@@ -24,6 +25,7 @@
 static INS_t INS;
 static IMU_Param_t IMU_Param;
 static PIDInstance TempCtrl = {0};
+static PWMInstance *imu_heat_pwm = NULL;
 
 const float xb[3] = {1, 0, 0};
 const float yb[3] = {0, 1, 0};
@@ -38,7 +40,19 @@ static void IMU_Param_Correction(IMU_Param_t *param, float gyro[3], float accel[
 
 static void IMUPWMSet(uint16_t pwm)
 {
-    __HAL_TIM_SetCompare(&htim3, TIM_CHANNEL_4, pwm);
+    if (imu_heat_pwm == NULL || imu_heat_pwm->htim == NULL)
+    {
+        return;
+    }
+
+    // 原温控PID输出的是CCR计数值,这里换算为bsp_pwm使用的0~1占空比语义
+    uint64_t period_ticks = (uint64_t)imu_heat_pwm->htim->Instance->ARR + 1ULL;
+    if (period_ticks == 0ULL)
+    {
+        return;
+    }
+
+    PWMSetDutyRatio(imu_heat_pwm, (float)pwm / (float)period_ticks);
 }
 
 /**
@@ -48,7 +62,8 @@ static void IMUPWMSet(uint16_t pwm)
 static void IMU_Temperature_Ctrl(void)
 {
     PIDCalculate(&TempCtrl, BMI088.Temperature, RefTemp);
-    IMUPWMSet(float_constrain(float_rounding(TempCtrl.Output), 0, UINT32_MAX));
+    uint16_t heat_pwm = (uint16_t)float_constrain(float_rounding(TempCtrl.Output), 0, UINT16_MAX);
+    IMUPWMSet(heat_pwm);
 }
 
 // 使用加速度计的数据初始化Roll和Pitch,而Yaw置0,这样可以避免在初始时候的姿态估计误差
@@ -85,7 +100,13 @@ attitude_t *INS_Init(void)
     else
         return (attitude_t *)&INS.Gyro;
 
-    HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+    PWM_Init_Config_s imu_heat_pwm_config = {
+        .htim = &htim3,
+        .channel = TIM_CHANNEL_4,
+        .period = 0.001f,
+        .dutyratio = 0.0f,
+    };
+    imu_heat_pwm = PWMRegister(&imu_heat_pwm_config);
 
     while (BMI088Init(&hspi2, 1) != BMI088_NO_ERROR)
         ;
