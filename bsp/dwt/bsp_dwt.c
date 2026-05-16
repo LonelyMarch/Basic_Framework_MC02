@@ -170,7 +170,7 @@ void DWT_Delay(float Delay)
     float delay_tick_f = Delay * (float)CPU_FREQ_Hz;
     if (delay_tick_f >= (float)DWT_DELAY_MAX_TICK)
     {
-        LOGERROR("[DWT] delay too long, delay = %f s", Delay);
+        LOGERROR("[DWT] delay too long, delay = [%d] ms", (int)(Delay * 1000.0f));
         delay_tick_f = (float)DWT_DELAY_MAX_TICK;
     }
 

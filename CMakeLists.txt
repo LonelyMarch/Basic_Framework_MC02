@@ -156,7 +156,10 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     ARM_MATH_CM7
-    DISABLE_LOG_SYSTEM
+    $<$<CONFIG:Debug>:DISABLE_LOG_SYSTEM=0>
+    $<$<CONFIG:Release>:DISABLE_LOG_SYSTEM=1>
+    $<$<CONFIG:RelWithDebInfo>:DISABLE_LOG_SYSTEM=1>
+    $<$<CONFIG:MinSizeRel>:DISABLE_LOG_SYSTEM=1>
 )
 
 # Remove wrong libob.a library dependency when using cpp files

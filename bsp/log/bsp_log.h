@@ -2,8 +2,6 @@
 #define _BSP_LOG_H
 
 #include "SEGGER_RTT.h"
-#include "SEGGER_RTT_Conf.h"
-#include <stdio.h>
 
 #define BUFFER_INDEX 0
 
@@ -11,7 +9,7 @@
  * @brief 日志系统初始化
  *
  */
-void BSPLogInit();
+void BSPLogInit(void);
 
 /**
  * @brief 日志功能原型,供下面的LOGI,LOGW,LOGE等使用
@@ -34,10 +32,10 @@ void BSPLogInit();
 
 /**
  *  有颜色格式日志输出,建议使用这些宏来输出日志
- *  @attention 注意这些接口不支持浮点格式化输出,若有需要,请使用Float2Str()函数进行转换后再打印
+ *  @attention 注意这些接口不支持浮点格式化输出,建议换算成整数单位后打印
  *  @note 在release版本上车使用时,与makefile中添加的宏DISABLE_LOG_SYSTEM一起使用,可以关闭日志系统
  */
-#if DISABLE_LOG_SYSTEM
+#if defined(DISABLE_LOG_SYSTEM) && (DISABLE_LOG_SYSTEM)
 #define LOGINFO(format, ...) 
 #define LOGWARNING(format, ...) 
 #define LOGERROR(format, ...) 
@@ -52,21 +50,12 @@ void BSPLogInit();
 
 /**
  * @brief 通过segger RTT打印日志,支持格式化输出,格式化输出的实现参考printf.
- * @attention !! 此函数不支持浮点格式化,若有需要,请使用Float2Str()函数进行转换后再打印 !!
+ * @attention !! 此函数不支持浮点格式化,建议换算成整数单位后打印 !!
  *
  * @param fmt 格式字符串
  * @param ... 参数列表
  * @return int 打印的log字符数
  */
 int PrintLog(const char *fmt, ...);
-
-/**
- * @brief 利用sprintf(),将float转换为字符串进行打印
- * @attention 浮点数需要转换为字符串后才能通过RTT打印
- *
- * @param str 转换后的字符串
- * @param va 待转换的float
- */
-void Float2Str(char *str, float va);
 
 #endif
