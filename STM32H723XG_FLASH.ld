@@ -236,6 +236,19 @@ SECTIONS
   PROVIDE( __bss_start = __tbss_start );
   PROVIDE( __bss_size = __bss_end - __bss_start );
 
+  /* DMA buffers for DMA1/DMA2 peripherals.
+     DTCMRAM is not reachable by DMA1/DMA2 on STM32H723, so buffers placed here
+     live in RAM_D2, which is directly connected to the D2 AHB bus matrix. */
+  .dma_buffer (NOLOAD) : ALIGN(32)
+  {
+    . = ALIGN(32);
+    __dma_buffer_start__ = .;
+    KEEP(*(.dma_buffer))
+    KEEP(*(.dma_buffer*))
+    . = ALIGN(32);
+    __dma_buffer_end__ = .;
+  } >RAM_D2
+
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack (NOLOAD) :
   {
