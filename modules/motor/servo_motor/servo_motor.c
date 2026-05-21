@@ -13,7 +13,19 @@ static void DecodeServo();
 // 通过此函数注册一个舵机
 ServoInstance *ServoInit(Servo_Init_Config_s *Servo_Init_Config)
 {
+    if (Servo_Init_Config == NULL)
+    {
+        LOGERROR("[servo] init config is null");
+        return NULL;
+    }
+
     ServoInstance *servo = (ServoInstance *)malloc(sizeof(ServoInstance));
+    if (servo == NULL)
+    {
+        LOGERROR("[servo] instance malloc failed");
+        return NULL;
+    }
+
     memset(servo, 0, sizeof(ServoInstance));
     USART_Init_Config_s config;
     servo->servo_type = Servo_Init_Config->servo_type;
@@ -24,13 +36,26 @@ ServoInstance *ServoInit(Servo_Init_Config_s *Servo_Init_Config)
         config.recv_buff_size = Servo_MAX_BUFF;
         config.usart_handle = Servo_Init_Config->_handle;
         servo->usart_instance = USARTRegister(&config);
+        if (servo->usart_instance == NULL)
+        {
+            LOGERROR("[servo] USART register failed");
+            free(servo);
+            return NULL;
+        }
         break;
     case PWM_Servo:
         servo->pwm_instance = PWMRegister(&Servo_Init_Config->pwm_init_config);
+        if (servo->pwm_instance == NULL)
+        {
+            LOGERROR("[servo] PWM register failed");
+            free(servo);
+            return NULL;
+        }
         break;
     default:
-        LOGERROR("Servo type error");
-        break;
+        LOGERROR("[servo] servo type error");
+        free(servo);
+        return NULL;
     }
     servo->servo_id = Servo_Init_Config->servo_id;
     servo_idx++;
@@ -41,13 +66,21 @@ ServoInstance *ServoInit(Servo_Init_Config_s *Servo_Init_Config)
 //@todo PWM舵机的角度设置需要根据相应定时器PWM等参数进行计算(是否需要规范定时器PWM的初始化参数，以便于计算)
 void ServoSetAngle(ServoInstance *servo, float angle)
 {
+    HAL_StatusTypeDef status;
+
+    if (servo == NULL)
+        return;
 
     switch (servo->servo_type)
     {
     case Bus_Servo:
         servo_angle_write[8] = (uint16_t)angle&0xff;
         servo_angle_write[9] = (uint16_t)angle>>8;
-        USARTSend(servo->usart_instance, servo_angle_write, 16, USART_TRANSFER_DMA);
+        status = USARTSend(servo->usart_instance, servo_angle_write, 16, USART_TRANSFER_DMA);
+        if (status != HAL_OK && status != HAL_BUSY)
+        {
+            LOGWARNING("[servo] send failed, status [%d]", status);
+        }
        // USARTSend(servo->usart_instance, servo_angle_read, 6, USART_TRANSFER_DMA);
         break;
     case PWM_Servo:
@@ -64,8 +97,11 @@ static void DecodeServo()
 {
     for (uint8_t i = 0; i < servo_idx; i++)
     {
-        if (servo_motor_instance[i]->servo_type == Bus_Servo)
+        if (servo_motor_instance[i] != NULL && servo_motor_instance[i]->servo_type == Bus_Servo)
         {
+            if (servo_motor_instance[i]->usart_instance == NULL || servo_motor_instance[i]->usart_instance->recv_len < Servo_MAX_BUFF)
+                continue;
+
             if (servo_motor_instance[i]->usart_instance->recv_buff[0] == Servo_Frame_First && servo_motor_instance[i]->usart_instance->recv_buff[1] == Servo_Frame_Second)
             {
                 if (servo_motor_instance[i]->usart_instance->recv_buff[3] == 21)

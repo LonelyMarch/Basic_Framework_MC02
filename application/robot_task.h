@@ -16,18 +16,21 @@
 #include "buzzer.h"
 
 #include "bsp_log.h"
+#include "bsp_usart.h"
 
 osThreadId_t insTaskHandle;
 osThreadId_t robotTaskHandle;
 osThreadId_t motorTaskHandle;
 osThreadId_t daemonTaskHandle;
 osThreadId_t uiTaskHandle;
+osThreadId_t usartTaskHandle;
 
 void StartINSTASK(void *argument);
 void StartMOTORTASK(void *argument);
 void StartDAEMONTASK(void *argument);
 void StartROBOTTASK(void *argument);
 void StartUITASK(void *argument);
+void StartUSARTTASK(void *argument);
 
 /**
  * @brief 初始化机器人任务,所有持续运行的任务都在这里初始化
@@ -71,6 +74,13 @@ void OSTaskInit()
     };
     uiTaskHandle = osThreadNew(StartUITASK, NULL, &uiTaskAttr);
 
+    const osThreadAttr_t usartTaskAttr = {
+        .name = "usarttask",
+        .stack_size = 512 * 4,
+        .priority = osPriorityNormal,
+    };
+    usartTaskHandle = osThreadNew(StartUSARTTASK, NULL, &usartTaskAttr);
+
     HTMotorControlInit(); // 没有注册HT电机则不会执行
 }
 
@@ -88,7 +98,6 @@ __attribute__((noreturn)) void StartINSTASK(void *argument)
         ins_dt = DWT_GetTimeline_ms() - ins_start;
         if (ins_dt > 1)
             LOGERROR("[freeRTOS] INS Task is being DELAY! dt = [%d] us", (int)(ins_dt * 1000.0f));
-        VisionSend(); // 解算完成后发送视觉数据,但是当前的实现不太优雅,后续若添加硬件触发需要重新考虑结构的组织
         osDelay(1);
     }
 }
@@ -155,5 +164,15 @@ __attribute__((noreturn)) void StartUITASK(void *argument)
         // 每给裁判系统发送一包数据会挂起一次,详见UITask函数的refereeSend()
         UITask();
         osDelay(1); // 即使没有任何UI需要刷新,也挂起一次,防止卡在UITask中无法切换
+    }
+}
+
+__attribute__((noreturn)) void StartUSARTTASK(void *argument)
+{
+    LOGINFO("[freeRTOS] USART Task Start");
+    for (;;)
+    {
+        USARTProcess();
+        osDelay(1);
     }
 }

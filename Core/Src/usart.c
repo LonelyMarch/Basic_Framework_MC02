@@ -619,6 +619,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 
     __HAL_LINKDMA(uartHandle,hdmatx,hdma_uart9_tx);
 
+    /* UART9 interrupt Init */
+    HAL_NVIC_SetPriority(UART9_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(UART9_IRQn);
   /* USER CODE BEGIN UART9_MspInit 1 */
 
   /* USER CODE END UART9_MspInit 1 */
@@ -1021,6 +1024,9 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     /* UART9 DMA DeInit */
     HAL_DMA_DeInit(uartHandle->hdmarx);
     HAL_DMA_DeInit(uartHandle->hdmatx);
+
+    /* UART9 interrupt Deinit */
+    HAL_NVIC_DisableIRQ(UART9_IRQn);
   /* USER CODE BEGIN UART9_MspDeInit 1 */
 
   /* USER CODE END UART9_MspDeInit 1 */

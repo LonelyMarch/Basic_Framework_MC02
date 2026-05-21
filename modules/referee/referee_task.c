@@ -42,6 +42,9 @@ static void RobotModeTest(Referee_Interactive_info_t *_Interactive_data); // 测
 referee_info_t *UITaskInit(UART_HandleTypeDef *referee_usart_handle, Referee_Interactive_info_t *UI_data)
 {
     referee_recv_info = RefereeInit(referee_usart_handle); // 初始化裁判系统的串口,并返回裁判系统反馈数据指针
+    if (referee_recv_info == NULL)
+        return NULL;
+
     Interactive_data = UI_data;                            // 获取UI绘制需要的机器人状态数据
     referee_recv_info->init_flag = 1;
     return referee_recv_info;
@@ -61,6 +64,9 @@ static uint32_t shoot_line_location[10] = {540, 960, 490, 515, 565};
 
 void MyUIInit()
 {
+    if (referee_recv_info == NULL)
+        vTaskDelete(NULL);
+
     if (!referee_recv_info->init_flag)
         vTaskDelete(NULL); // 如果没有初始化裁判系统则直接删除ui任务
     while (referee_recv_info->GameRobotState.robot_id == 0)

@@ -588,6 +588,7 @@ NVIC.TimeBase=TIM23_IRQn
 NVIC.TimeBaseIP=TIM23
 NVIC.UART5_IRQn=true\:5\:0\:false\:false\:true\:true\:true\:true\:true
 NVIC.UART7_IRQn=true\:5\:0\:true\:false\:true\:false\:true\:true\:true
+NVIC.UART9_IRQn=true\:5\:0\:false\:false\:true\:true\:true\:true\:true
 NVIC.USART10_IRQn=true\:5\:0\:true\:false\:true\:false\:true\:true\:true
 NVIC.USART1_IRQn=true\:5\:0\:true\:false\:true\:false\:true\:true\:true
 NVIC.USART2_IRQn=true\:5\:0\:true\:false\:true\:false\:true\:true\:true
