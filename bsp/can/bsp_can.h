@@ -1,73 +1,25 @@
 #ifndef BSP_CAN_H
 #define BSP_CAN_H
 
-//在此选择CAN类型，两者只能选择一个！！！
-#define FDCAN //G系列和H7系列使用FDCAN
-//#define BXCAN //F系列使用BxCAN
-
-//CAN类型宏定义检查，有错误停止编译
-#if !defined(FDCAN) && !defined(BXCAN)
-    #error "Neither FDCAN nor BXCAN is defined. Please define one of them."
-#elif defined(FDCAN) && defined(BXCAN)
-    #error "Both FDCAN and BXCAN are defined. Please define only one."
-#endif
-
-
 #include <stdint.h>
-#ifdef FDCAN
 #include "fdcan.h"
-#define hcan1  hfdcan1
-#define hcan2  hfdcan2
-#define hcan3  hfdcan3
 
 #define CAN_MX_REGISTER_CNT 32     // 所有FDCAN外设共用的CAN实例注册上限
-#define MX_CAN_FILTER_CNT (3 * 14) // 最多可以使用的CAN过滤器数量,目前远不会用到这么多
-#define DEVICE_CAN_CNT 3           //H723VG有3个FDCAN
+#define DEVICE_CAN_CNT 3           // STM32H723VG提供3个FDCAN外设
 
-#endif
-#ifdef BXCAN
-#include "can.h"
-// 最多能够支持的CAN设备数
-#define CAN_MX_REGISTER_CNT 16     // 这个数量取决于CAN总线的负载
-#define MX_CAN_FILTER_CNT (2 * 14) // 最多可以使用的CAN过滤器数量,目前远不会用到这么多
-#define DEVICE_CAN_CNT 2           // 根据板子设定,F407IG有CAN1,CAN2,因此为2;F334只有一个,则设为1
-// 如果只有1个CAN,还需要把bsp_can.c中所有的hcan2变量改为hcan1(别担心,主要是总线和FIFO的负载均衡,不影响功能)
-#endif
-
-// 定义查找表
-static const uint32_t DLC_LookUp_Table[9] = {
-    FDCAN_DLC_BYTES_0,
-    FDCAN_DLC_BYTES_1,  
-    FDCAN_DLC_BYTES_2,  
-    FDCAN_DLC_BYTES_3,
-    FDCAN_DLC_BYTES_4,
-    FDCAN_DLC_BYTES_5,
-    FDCAN_DLC_BYTES_6,
-    FDCAN_DLC_BYTES_7,
-    FDCAN_DLC_BYTES_8
-};
-
-
-
-/* can instance typedef, every module registered to CAN should have this variable */
+/* CAN实例由模块注册获得,用于保存该模块在某一路FDCAN上的收发ID、缓存和回调。 */
 #pragma pack(1)
 typedef struct _
 {
-#ifdef FDCAN
     FDCAN_HandleTypeDef  *can_handle; // can句柄
     FDCAN_TxHeaderTypeDef txconf;    // CAN报文发送配置
-#else
-    CAN_HandleTypeDef *can_handle; // can句柄
-    CAN_TxHeaderTypeDef txconf;    // CAN报文发送配置
-#endif
     uint32_t tx_id;                // 发送id
-    uint32_t tx_mailbox;           // CAN消息填入的邮箱号
     uint8_t tx_buff[8];            // 发送缓存,发送消息长度可以通过CANSetDLC()设定,最大为8
     uint8_t rx_buff[8];            // 接收缓存,最大消息长度为8
     uint32_t rx_id;                // 接收id
     uint8_t rx_len;                // 接收长度,可能为0-8
-    // 接收的回调函数,用于解析接收到的数据
-    void (*can_module_callback)(struct _ *); // callback needs an instance to tell among registered ones
+    // 接收的回调函数,由CANProcessTask在任务上下文调用,参数用于区分不同注册实例
+    void (*can_module_callback)(struct _ *);
     void *id;                                // 使用can外设的模块指针(即id指向的模块拥有此can实例,是父子关系)
 } CANInstance;
 #pragma pack()
@@ -75,11 +27,7 @@ typedef struct _
 /* CAN实例初始化结构体,将此结构体指针传入注册函数 */
 typedef struct
 {
-#ifdef FDCAN
     FDCAN_HandleTypeDef  *can_handle;           // can句柄
-#else
-    CAN_HandleTypeDef *can_handle;              // can句柄
-#endif
     uint32_t tx_id;                             // 发送id
     uint32_t rx_id;                             // 接收id
     void (*can_module_callback)(CANInstance *); // 处理接收数据的回调函数
@@ -87,12 +35,20 @@ typedef struct
 } CAN_Init_Config_s;
 
 /**
- * @brief Register a module to CAN service,remember to call this before using a CAN device
- *        注册(初始化)一个can实例,需要传入初始化配置的指针.
- * @param config init config
- * @return CANInstance* can instance owned by module
+ * @brief 注册一个CAN实例,使用CAN收发前必须先调用本函数。
+ *
+ * @param config CAN初始化配置
+ * @return CANInstance* 注册成功返回实例指针,失败进入Error_Handler或返回NULL
  */
 CANInstance *CANRegister(CAN_Init_Config_s *config);
+
+/**
+ * @brief CAN接收处理任务
+ *
+ * @note FDCAN中断只负责把报文复制到BSP内部队列,真正的模块回调由本任务执行。
+ *       当前工程在application/robot_task.h中创建该任务。
+ */
+void CANProcessTask(void *argument);
 
 /**
  * @brief 修改CAN发送报文的数据帧长度;注意最大长度为8,在没有进行修改的时候,默认长度为8
@@ -108,9 +64,46 @@ void CANSetDLC(CANInstance *_instance, uint8_t length);
  * 
  * @attention 超时时间不应该超过调用此函数的任务的周期,否则会导致任务阻塞
  * 
- * @param timeout 超时时间,单位为ms;后续改为us,获得更精确的控制
- * @param _instance* can instance owned by module
+ * @param timeout 超时时间,单位为ms。小于1ms的超时会保持DWT短忙等,毫秒级等待会在任务态让出CPU
+ * @param _instance 模块持有的CAN实例
  */
 uint8_t CANTransmit(CANInstance *_instance,float timeout);
+
+/**
+ * @brief 获取CAN接收延后事件队列丢帧次数
+ *
+ * @return uint32_t CAN接收事件队列满导致的丢弃计数
+ */
+uint32_t CANGetDroppedRxEventCount(void);
+
+/**
+ * @brief 获取FDCAN硬件FIFO丢帧次数
+ *
+ * @param hfdcan FDCAN句柄
+ * @param fifo FDCAN_RX_FIFO0 或 FDCAN_RX_FIFO1
+ * @return uint32_t 指定FIFO的硬件丢帧计数
+ */
+uint32_t CANGetFifoLostCount(FDCAN_HandleTypeDef *hfdcan, uint32_t fifo);
+
+/**
+ * @brief 获取所有CAN硬件FIFO丢帧总次数
+ *
+ * @return uint32_t 硬件FIFO丢帧总计数
+ */
+uint32_t CANGetHardwareLostCount(void);
+
+/**
+ * @brief 获取CAN接收HAL错误计数
+ *
+ * @note 该计数在接收中断中递增,用于替代中断里直接打印日志。
+ */
+uint32_t CANGetRxHalErrorCount(void);
+
+/**
+ * @brief 获取CAN接收DLC非法计数
+ *
+ * @note 该计数在接收中断中递增,用于替代中断里直接打印日志。
+ */
+uint32_t CANGetRxInvalidDlcCount(void);
 
 #endif

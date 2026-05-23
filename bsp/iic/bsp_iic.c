@@ -2,12 +2,21 @@
 #include "bsp_log.h"
 #include "cmsis_os2.h"
 #include "memory.h"
-#include "stdlib.h"
 
 // HAL阻塞接口的超时时间,单位ms。
 #define IIC_HAL_TIMEOUT_MS 100U
 // FreeRTOS等待I2C总线互斥锁或异步完成信号的超时时间,单位tick。
 #define IIC_OS_TIMEOUT_TICK 100U
+// I2C DMA内部中转缓冲区大小。I2C常用于小包传感器通信,这里预留256字节。
+#define IIC_DMA_BOUNCE_BUFFER_SIZE 256U
+// STM32H7 D-Cache line大小为32字节。
+#define IIC_DCACHE_LINE_SIZE 32U
+
+#if defined(__GNUC__)
+#define IIC_DMA_BUFFER_ATTR __attribute__((section(".dma_buffer"), aligned(32)))
+#else
+#define IIC_DMA_BUFFER_ATTR
+#endif
 
 /**
  * @brief I2C硬件总线资源
@@ -24,24 +33,132 @@ typedef struct
     HAL_StatusTypeDef last_status;    // 最近一次异步传输结果
     IICInstance *hold_instance;       // HOLDON序列传输期间持有总线的实例
     osThreadId_t hold_thread;         // HOLDON序列传输期间持有总线的任务
+    uint8_t *dma_tx_buffer;            // RAM_D2中的DMA发送中转缓冲区
+    uint8_t *dma_rx_buffer;            // RAM_D2中的DMA接收中转缓冲区
+    volatile uint8_t os_objects_ready; // mutex/semaphore是否已经完整创建
 } IICBusResource;
 
 static uint8_t idx = 0;     // 已注册的I2C从设备实例数量
 static uint8_t bus_idx = 0; // 已登记的I2C硬件总线数量
+static IICInstance iic_instance_pool[MX_IIC_SLAVE_CNT]; // I2C实例静态池,控制结构体放默认.bss/DTCM
 static IICInstance *iic_instance[MX_IIC_SLAVE_CNT] = {NULL};
 static IICBusResource iic_bus[IIC_DEVICE_CNT] = {0};
+
+/*
+ * STM32H7的DMA1/DMA2不能访问DTCM。I2C DMA统一使用RAM_D2中的内部中转缓冲,
+ * 上层可以继续传入普通局部变量、普通static变量或malloc得到的缓冲区。
+ */
+static uint8_t iic_dma_tx_buffer[IIC_DEVICE_CNT][IIC_DMA_BOUNCE_BUFFER_SIZE] IIC_DMA_BUFFER_ATTR;
+static uint8_t iic_dma_rx_buffer[IIC_DEVICE_CNT][IIC_DMA_BOUNCE_BUFFER_SIZE] IIC_DMA_BUFFER_ATTR;
+
+/**
+ * @brief 将地址范围扩展到D-Cache line边界
+ */
+static void IICAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *aligned_address, int32_t *aligned_size)
+{
+    uintptr_t start = address & ~((uintptr_t)IIC_DCACHE_LINE_SIZE - 1U);
+    uintptr_t end = (address + size + IIC_DCACHE_LINE_SIZE - 1U) & ~((uintptr_t)IIC_DCACHE_LINE_SIZE - 1U);
+
+    *aligned_address = start;
+    *aligned_size = (int32_t)(end - start);
+}
+
+/**
+ * @brief DMA读取内存前清理D-Cache
+ */
+static void IICCleanDCacheByAddr(const void *buffer, uint16_t len)
+{
+#if IIC_USE_DMA_CACHE_MAINTENANCE
+    uintptr_t aligned_address;
+    int32_t aligned_size;
+
+    if (buffer == NULL || len == 0U || (SCB->CCR & SCB_CCR_DC_Msk) == 0U)
+    {
+        return;
+    }
+
+    IICAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
+    SCB_CleanDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+#else
+    (void)buffer;
+    (void)len;
+#endif
+}
+
+/**
+ * @brief DMA写入内存前后失效D-Cache
+ */
+static void IICInvalidateDCacheByAddr(const void *buffer, uint16_t len)
+{
+#if IIC_USE_DMA_CACHE_MAINTENANCE
+    uintptr_t aligned_address;
+    int32_t aligned_size;
+
+    if (buffer == NULL || len == 0U || (SCB->CCR & SCB_CCR_DC_Msk) == 0U)
+    {
+        return;
+    }
+
+    IICAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
+    SCB_InvalidateDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+#else
+    (void)buffer;
+    (void)len;
+#endif
+}
+
+/**
+ * @brief 检查本次DMA传输长度是否能放入内部中转缓冲区
+ */
+static HAL_StatusTypeDef IICCheckDmaLength(uint16_t size)
+{
+    if (size > IIC_DMA_BOUNCE_BUFFER_SIZE)
+    {
+        LOGERROR("[bsp_iic] IIC DMA传输长度超过内部缓冲区: len=%u, limit=%u",
+                 (unsigned int)size,
+                 (unsigned int)IIC_DMA_BOUNCE_BUFFER_SIZE);
+        return HAL_ERROR;
+    }
+
+    return HAL_OK;
+}
+
+/**
+ * @brief 检查CubeMX是否给当前I2C句柄配置了所需DMA通道
+ */
+static HAL_StatusTypeDef IICCheckDmaReady(IICInstance *iic, uint8_t need_tx, uint8_t need_rx)
+{
+    if (iic == NULL || iic->handle == NULL)
+    {
+        return HAL_ERROR;
+    }
+
+    if (need_tx != 0U && iic->handle->hdmatx == NULL)
+    {
+        LOGERROR("[bsp_iic] IIC DMA发送失败: hdmatx为空,请在CubeMX中配置I2C TX DMA");
+        return HAL_ERROR;
+    }
+
+    if (need_rx != 0U && iic->handle->hdmarx == NULL)
+    {
+        LOGERROR("[bsp_iic] IIC DMA接收失败: hdmarx为空,请在CubeMX中配置I2C RX DMA");
+        return HAL_ERROR;
+    }
+
+    return HAL_OK;
+}
 
 /**
  * @brief I2C注册阶段错误处理
  *
  * 注册阶段属于系统基础资源初始化。为了保持原框架“初始化失败立即停机”的语义,
- * 这里先打印错误原因,再进入死循环,避免错误继续扩散到后续业务代码。
+ * 这里先打印错误原因,再进入Error_Handler(),避免错误继续扩散到后续业务代码。
  */
-static void IICRegisterErrorHandler(const char *error_msg)
+__attribute__((noreturn)) static void IICRegisterErrorHandler(const char *error_msg)
 {
     LOGERROR("[bsp_iic] IIC注册失败: %s", error_msg);
-    while (1)
-        ;
+    Error_Handler();
+    __builtin_unreachable();
 }
 
 /**
@@ -66,8 +183,8 @@ static IICBusResource *IICFindBusByHandle(I2C_HandleTypeDef *handle)
 /**
  * @brief 获取或登记一条I2C硬件总线
  *
- * 这里只登记handle,不立即创建mutex/semaphore。当前工程中RobotInit()早于
- * osKernelInitialize()执行,过早创建RTOS对象可能失败,因此RTOS对象在任务态第一次通信时懒创建。
+ * 这里只登记handle,不立即创建mutex/semaphore。RTOS对象由BSPTaskInit()在
+ * osKernelInitialize()之后统一创建；若运行期动态注册新总线,首次访问时会兜底创建。
  *
  * @param handle I2C硬件句柄
  * @return 对应的总线资源
@@ -75,6 +192,8 @@ static IICBusResource *IICFindBusByHandle(I2C_HandleTypeDef *handle)
 static IICBusResource *IICGetOrCreateBus(I2C_HandleTypeDef *handle)
 {
     IICBusResource *bus = IICFindBusByHandle(handle);
+    uint8_t new_bus_idx;
+
     if (bus != NULL)
     {
         return bus;
@@ -85,10 +204,15 @@ static IICBusResource *IICGetOrCreateBus(I2C_HandleTypeDef *handle)
         IICRegisterErrorHandler("超过最大I2C总线数量");
     }
 
-    bus = &iic_bus[bus_idx];
+    new_bus_idx = bus_idx;
+    bus = &iic_bus[new_bus_idx];
     memset(bus, 0, sizeof(IICBusResource));
     bus->handle = handle;
     bus->last_status = HAL_OK;
+    bus->dma_tx_buffer = iic_dma_tx_buffer[new_bus_idx];
+    bus->dma_rx_buffer = iic_dma_rx_buffer[new_bus_idx];
+    memset(bus->dma_tx_buffer, 0, IIC_DMA_BOUNCE_BUFFER_SIZE);
+    memset(bus->dma_rx_buffer, 0, IIC_DMA_BOUNCE_BUFFER_SIZE);
     bus_idx++;
     return bus;
 }
@@ -96,8 +220,8 @@ static IICBusResource *IICGetOrCreateBus(I2C_HandleTypeDef *handle)
 /**
  * @brief 确保总线的RTOS对象已经创建
  *
- * 本函数只允许在FreeRTOS调度器运行后调用。mutex使用优先级继承,
- * 降低低优先级任务占用I2C时对高优先级任务造成的优先级反转影响。
+ * 当前主要由IICBusOsInit()在osKernelInitialize()之后、任务启动前统一创建。
+ * 若后续确实在任务运行期动态注册I2C总线,本函数也会在第一次访问时兜底创建。
  */
 static HAL_StatusTypeDef IICEnsureBusOsObjects(IICBusResource *bus)
 {
@@ -105,33 +229,88 @@ static HAL_StatusTypeDef IICEnsureBusOsObjects(IICBusResource *bus)
         .name = "bsp_iic_mutex",
         .attr_bits = osMutexRecursive | osMutexPrioInherit,
     };
+    osKernelState_t kernel_state;
+    int32_t kernel_lock = -1;
+    HAL_StatusTypeDef status = HAL_OK;
 
     if (bus == NULL)
     {
         return HAL_ERROR;
     }
 
-    if (osKernelGetState() != osKernelRunning)
+    if (bus->os_objects_ready != 0U)
     {
+        return HAL_OK;
+    }
+
+    kernel_state = osKernelGetState();
+    if (kernel_state == osKernelInactive || kernel_state == osKernelError)
+    {
+        LOGERROR("[bsp_iic] IIC总线资源创建失败: RTOS内核尚未初始化");
         return HAL_ERROR;
     }
 
-    if (bus->mutex == NULL)
+    /*
+     * 正常路径是在调度器启动前统一创建,没有并发。若运行期动态注册总线,
+     * 这里短暂锁住内核调度,避免两个任务同时为同一总线创建RTOS对象。
+     */
+    if (kernel_state == osKernelRunning)
     {
-        bus->mutex = osMutexNew(&mutex_attr);
-        if (bus->mutex == NULL)
+        kernel_lock = osKernelLock();
+        if (kernel_lock < 0)
         {
-            LOGERROR("[bsp_iic] IIC总线资源创建失败: 互斥锁为空");
+            LOGERROR("[bsp_iic] IIC总线资源创建失败: 内核锁定失败");
             return HAL_ERROR;
+        }
+
+        if (bus->os_objects_ready != 0U)
+        {
+            (void)osKernelRestoreLock(kernel_lock);
+            return HAL_OK;
         }
     }
 
-    if (bus->complete_sem == NULL)
+    do
     {
-        bus->complete_sem = osSemaphoreNew(1, 0, NULL);
         if (bus->complete_sem == NULL)
         {
-            LOGERROR("[bsp_iic] IIC总线资源创建失败: 完成信号量为空");
+            bus->complete_sem = osSemaphoreNew(1, 0, NULL);
+            if (bus->complete_sem == NULL)
+            {
+                LOGERROR("[bsp_iic] IIC总线资源创建失败: 完成信号量为空");
+                status = HAL_ERROR;
+                break;
+            }
+        }
+
+        if (bus->mutex == NULL)
+        {
+            bus->mutex = osMutexNew(&mutex_attr);
+            if (bus->mutex == NULL)
+            {
+                LOGERROR("[bsp_iic] IIC总线资源创建失败: 互斥锁为空");
+                status = HAL_ERROR;
+                break;
+            }
+        }
+
+        bus->os_objects_ready = 1U;
+    } while (0);
+
+    if (kernel_lock >= 0)
+    {
+        (void)osKernelRestoreLock(kernel_lock);
+    }
+
+    return status;
+}
+
+HAL_StatusTypeDef IICBusOsInit(void)
+{
+    for (uint8_t i = 0; i < bus_idx; i++)
+    {
+        if (IICEnsureBusOsObjects(&iic_bus[i]) != HAL_OK)
+        {
             return HAL_ERROR;
         }
     }
@@ -146,6 +325,11 @@ static HAL_StatusTypeDef IICEnsureBusOsObjects(IICBusResource *bus)
  */
 static void IICClearCompleteSem(IICBusResource *bus)
 {
+    if (bus == NULL || bus->complete_sem == NULL)
+    {
+        return;
+    }
+
     while (osSemaphoreAcquire(bus->complete_sem, 0) == osOK)
     {
     }
@@ -322,43 +506,6 @@ static void IICNotifyDone(I2C_HandleTypeDef *hi2c, HAL_StatusTypeDef status)
 }
 
 /**
- * @brief 根据HAL句柄和当前设备地址查找I2C实例
- *
- * HAL在回调中只能给出hi2c,设备地址需要从hi2c->Devaddress反查。
- */
-static IICInstance *IICFindInstanceByHandleAndAddress(I2C_HandleTypeDef *hi2c)
-{
-    for (uint8_t i = 0; i < idx; i++)
-    {
-        if (iic_instance[i] == NULL)
-        {
-            continue;
-        }
-
-        if (iic_instance[i]->handle == hi2c && hi2c->Devaddress == iic_instance[i]->dev_address)
-        {
-            return iic_instance[i];
-        }
-    }
-
-    return NULL;
-}
-
-/**
- * @brief 分发接收完成回调
- *
- * 仅接收完成和内存读取完成会调用模块回调。发送完成只用于唤醒等待任务。
- */
-static void IICDispatchRxCallback(I2C_HandleTypeDef *hi2c)
-{
-    IICInstance *instance = IICFindInstanceByHandleAndAddress(hi2c);
-    if (instance != NULL && instance->callback != NULL)
-    {
-        instance->callback(instance);
-    }
-}
-
-/**
  * @brief 注册一个I2C从设备实例
  */
 IICInstance *IICRegister(IIC_Init_Config_s *conf)
@@ -382,13 +529,7 @@ IICInstance *IICRegister(IIC_Init_Config_s *conf)
 
     (void)IICGetOrCreateBus(conf->handle);
 
-    // 申请到的空间未必是0, 所以需要手动初始化
-    instance = (IICInstance *)malloc(sizeof(IICInstance));
-    if (instance == NULL)
-    {
-        IICRegisterErrorHandler("实例内存申请失败");
-    }
-
+    instance = &iic_instance_pool[idx];
     memset(instance, 0, sizeof(IICInstance));
 
     instance->dev_address = conf->dev_address << 1; // 地址左移一位,最低位为读写位
@@ -399,20 +540,6 @@ IICInstance *IICRegister(IIC_Init_Config_s *conf)
 
     iic_instance[idx++] = instance;
     return instance;
-}
-
-void IICSetMode(IICInstance *iic, IIC_Work_Mode_e mode)
-{
-    if (iic == NULL)
-    {
-        LOGERROR("[bsp_iic] IIC模式设置失败: 实例为空");
-        return;
-    }
-
-    if (iic->work_mode != mode)
-    {
-        iic->work_mode = mode; // 如果不同才需要修改
-    }
 }
 
 /**
@@ -436,6 +563,12 @@ HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, II
     if (iic->work_mode == IIC_BLOCK_MODE && seq_mode != IIC_SEQ_RELEASE)
     {
         LOGERROR("[bsp_iic] IIC发送失败: 阻塞模式不支持HOLDON");
+        return HAL_ERROR;
+    }
+
+    if (iic->work_mode != IIC_BLOCK_MODE && osKernelGetState() != osKernelRunning)
+    {
+        LOGERROR("[bsp_iic] IIC发送失败: IT/DMA模式需要在FreeRTOS调度器启动后使用");
         return HAL_ERROR;
     }
 
@@ -473,9 +606,21 @@ HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, II
             status = HAL_ERROR;
             break;
         }
+        if (IICCheckDmaReady(iic, 1U, 0U) != HAL_OK || IICCheckDmaLength(size) != HAL_OK)
+        {
+            status = HAL_ERROR;
+            break;
+        }
+
+        /*
+         * 上层发送buffer可能位于DTCM,而DMA1/DMA2不能访问DTCM。
+         * 因此先复制到RAM_D2中的内部中转缓冲区,再启动I2C DMA发送。
+         */
+        memcpy(bus->dma_tx_buffer, data, size);
+        IICCleanDCacheByAddr(bus->dma_tx_buffer, size);
         IICClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
-        status = HAL_I2C_Master_Seq_Transmit_DMA(iic->handle, iic->dev_address, data, size,
+        status = HAL_I2C_Master_Seq_Transmit_DMA(iic->handle, iic->dev_address, bus->dma_tx_buffer, size,
                                                  seq_mode == IIC_SEQ_RELEASE ? I2C_OTHER_AND_LAST_FRAME : I2C_OTHER_FRAME);
         if (status == HAL_OK)
         {
@@ -495,8 +640,8 @@ HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, II
 /**
  * @brief 接收I2C数据
  *
- * 接收成功后会调用注册时传入的callback。BLOCK模式在任务上下文调用callback,
- * IT/DMA模式在HAL完成回调的中断上下文调用callback,回调内不要执行阻塞操作。
+ * 接收成功后会调用注册时传入的callback。BLOCK/IT/DMA模式均在调用者任务上下文
+ * 执行callback,HAL完成中断只负责释放完成信号量。
  */
 HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC_Seq_Mode_e seq_mode)
 {
@@ -516,6 +661,12 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
         return HAL_ERROR;
     }
 
+    if (iic->work_mode != IIC_BLOCK_MODE && osKernelGetState() != osKernelRunning)
+    {
+        LOGERROR("[bsp_iic] IIC接收失败: IT/DMA模式需要在FreeRTOS调度器启动后使用");
+        return HAL_ERROR;
+    }
+
     iic->rx_buffer = data;
     iic->rx_len = size;
 
@@ -531,10 +682,6 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
     {
     case IIC_BLOCK_MODE:
         status = HAL_I2C_Master_Receive(iic->handle, iic->dev_address, data, size, IIC_HAL_TIMEOUT_MS);
-        if (status == HAL_OK && iic->callback != NULL)
-        {
-            iic->callback(iic);
-        }
         break;
     case IIC_IT_MODE:
         if (bus == NULL)
@@ -557,13 +704,29 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
             status = HAL_ERROR;
             break;
         }
+        if (IICCheckDmaReady(iic, 0U, 1U) != HAL_OK || IICCheckDmaLength(size) != HAL_OK)
+        {
+            status = HAL_ERROR;
+            break;
+        }
+
+        /*
+         * DMA先写入RAM_D2内部缓冲区,完成后再复制回上层buffer。
+         * 启动接收前先失效cache,避免旧dirty cache line后续写回覆盖DMA新数据。
+         */
+        IICInvalidateDCacheByAddr(bus->dma_rx_buffer, size);
         IICClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
-        status = HAL_I2C_Master_Seq_Receive_DMA(iic->handle, iic->dev_address, data, size,
+        status = HAL_I2C_Master_Seq_Receive_DMA(iic->handle, iic->dev_address, bus->dma_rx_buffer, size,
                                                 seq_mode == IIC_SEQ_RELEASE ? I2C_OTHER_AND_LAST_FRAME : I2C_OTHER_FRAME);
         if (status == HAL_OK)
         {
             status = IICWaitAsyncDone(iic);
+            if (status == HAL_OK)
+            {
+                IICInvalidateDCacheByAddr(bus->dma_rx_buffer, size);
+                memcpy(data, bus->dma_rx_buffer, size);
+            }
         }
         break;
     default:
@@ -573,6 +736,10 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
     }
 
     IICUnlockBus(iic, status, need_unlock);
+    if (status == HAL_OK && iic->callback != NULL)
+    {
+        iic->callback(iic);
+    }
     return status;
 }
 
@@ -588,6 +755,7 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
     uint8_t need_unlock = 0;
     IICBusResource *bus;
     uint16_t bit_flag = mem8bit_flag ? I2C_MEMADD_SIZE_8BIT : I2C_MEMADD_SIZE_16BIT;
+    uint8_t should_callback = 0;
 
     if (iic == NULL || data == NULL || size == 0)
     {
@@ -598,6 +766,12 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
     if (mem_mode != IIC_WRITE_MEM && mem_mode != IIC_READ_MEM)
     {
         LOGERROR("[bsp_iic] IIC内存访问失败: 访问模式非法");
+        return HAL_ERROR;
+    }
+
+    if (iic->work_mode != IIC_BLOCK_MODE && osKernelGetState() != osKernelRunning)
+    {
+        LOGERROR("[bsp_iic] IIC内存访问失败: IT/DMA模式需要在FreeRTOS调度器启动后使用");
         return HAL_ERROR;
     }
 
@@ -619,10 +793,6 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
         else
         {
             status = HAL_I2C_Mem_Read(iic->handle, iic->dev_address, mem_addr, bit_flag, data, size, IIC_HAL_TIMEOUT_MS);
-            if (status == HAL_OK && iic->callback != NULL)
-            {
-                iic->callback(iic);
-            }
         }
         break;
     case IIC_IT_MODE:
@@ -652,19 +822,49 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
             status = HAL_ERROR;
             break;
         }
-        IICClearCompleteSem(bus);
-        bus->last_status = HAL_BUSY;
+        if (IICCheckDmaLength(size) != HAL_OK)
+        {
+            status = HAL_ERROR;
+            break;
+        }
+
         if (mem_mode == IIC_WRITE_MEM)
         {
-            status = HAL_I2C_Mem_Write_DMA(iic->handle, iic->dev_address, mem_addr, bit_flag, data, size);
+            if (IICCheckDmaReady(iic, 1U, 0U) != HAL_OK)
+            {
+                status = HAL_ERROR;
+                break;
+            }
+
+            // 内存写DMA同样先复制到RAM_D2中转缓冲区,避免DMA直接读取DTCM。
+            memcpy(bus->dma_tx_buffer, data, size);
+            IICCleanDCacheByAddr(bus->dma_tx_buffer, size);
+            IICClearCompleteSem(bus);
+            bus->last_status = HAL_BUSY;
+            status = HAL_I2C_Mem_Write_DMA(iic->handle, iic->dev_address, mem_addr, bit_flag, bus->dma_tx_buffer, size);
         }
         else
         {
-            status = HAL_I2C_Mem_Read_DMA(iic->handle, iic->dev_address, mem_addr, bit_flag, data, size);
+            if (IICCheckDmaReady(iic, 0U, 1U) != HAL_OK)
+            {
+                status = HAL_ERROR;
+                break;
+            }
+
+            // 内存读DMA先写入RAM_D2中转缓冲区,完成后再复制回上层buffer。
+            IICInvalidateDCacheByAddr(bus->dma_rx_buffer, size);
+            IICClearCompleteSem(bus);
+            bus->last_status = HAL_BUSY;
+            status = HAL_I2C_Mem_Read_DMA(iic->handle, iic->dev_address, mem_addr, bit_flag, bus->dma_rx_buffer, size);
         }
         if (status == HAL_OK)
         {
             status = IICWaitAsyncDone(iic);
+            if (status == HAL_OK && mem_mode == IIC_READ_MEM)
+            {
+                IICInvalidateDCacheByAddr(bus->dma_rx_buffer, size);
+                memcpy(data, bus->dma_rx_buffer, size);
+            }
         }
         break;
     default:
@@ -674,6 +874,11 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
     }
 
     IICUnlockBus(iic, status, need_unlock);
+    should_callback = (mem_mode == IIC_READ_MEM && status == HAL_OK && iic->callback != NULL) ? 1U : 0U;
+    if (should_callback != 0U)
+    {
+        iic->callback(iic);
+    }
     return status;
 }
 
@@ -690,7 +895,6 @@ void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
  */
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    IICDispatchRxCallback(hi2c);
     IICNotifyDone(hi2c, HAL_OK);
 }
 
@@ -707,7 +911,6 @@ void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
  */
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    IICDispatchRxCallback(hi2c);
     IICNotifyDone(hi2c, HAL_OK);
 }
 

@@ -1,10 +1,21 @@
 #include "bsp_gpio.h"
 #include "bsp_log.h"
+#include "bsp_service.h"
 #include "memory.h"
-#include "stdlib.h"
 
 static uint8_t idx;
+static GPIOInstance gpio_instance_pool[GPIO_MX_DEVICE_NUM]; // GPIO实例静态池,控制结构体放默认.bss/DTCM
 static GPIOInstance *gpio_instance[GPIO_MX_DEVICE_NUM] = {NULL};
+
+static void GPIODispatchDeferredCallback(void *arg)
+{
+    GPIOInstance *gpio = (GPIOInstance *)arg;
+
+    if (gpio != NULL && gpio->gpio_model_callback != NULL)
+    {
+        gpio->gpio_model_callback(gpio);
+    }
+}
 
 static GPIOInstance *GPIOFindEXTIInstance(uint16_t GPIO_Pin)
 {
@@ -26,16 +37,17 @@ static GPIOInstance *GPIOFindEXTIInstance(uint16_t GPIO_Pin)
 }
 
 /**
- * @brief EXTI中断回调函数,根据GPIO_Pin找到对应的GPIOInstance,并调用模块回调函数(如果有)
- * @note 如何判断具体是哪一个GPIO的引脚连接到这个EXTI中断线上?
- *       一个EXTI中断线只能连接一个GPIO引脚,因此可以通过GPIO_Pin来判断,PinX对应EXTIX
+ * @brief HAL EXTI回调函数,根据GPIO_Pin找到对应的GPIOInstance并投递延后事件。
+ *
+ * @note HAL只传入GPIO_Pin,不传GPIOx。实际工程中同一条EXTI线只能映射到一个端口的同号引脚,
+ *       因此只要CubeMX配置没有冲突,即可通过GPIO_Pin唯一定位已注册实例。
  *       一个Pin号只会对应一个EXTI,详情见gpio.md
  * @param GPIO_Pin 发生中断的GPIO_Pin
  */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     // 如有必要,可以根据pinstate和HAL_GPIO_ReadPin来判断是上升沿还是下降沿/rise&fall等
-    // 注意: gpio_model_callback运行在EXTI中断上下文,回调内不要执行阻塞或耗时操作
+    // 注意: EXTI中断中只投递事件,真正的gpio_model_callback由BSP服务任务在任务上下文执行
     GPIOInstance *gpio;
     for (size_t i = 0; i < idx; i++)
     {
@@ -47,7 +59,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
         if (gpio->GPIO_Pin == GPIO_Pin && gpio->gpio_model_callback != NULL)
         {
-            gpio->gpio_model_callback(gpio);
+            (void)BSPServicePostFromISR(GPIODispatchDeferredCallback, gpio);
             return;
         }
     }
@@ -89,13 +101,29 @@ GPIOInstance *GPIORegister(GPIO_Init_Config_s *GPIO_config)
         return NULL;
     }
 
-    GPIOInstance *ins = (GPIOInstance *)malloc(sizeof(GPIOInstance));
-    if (ins == NULL)
+    // 注册表会在EXTI中断回调中被读取,这里只保护发布实例的极短临界区
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    if (idx >= GPIO_MX_DEVICE_NUM)
     {
-        LOGERROR("[bsp_gpio] GPIO注册失败: 内存分配失败");
+        __set_PRIMASK(primask);
+        LOGERROR("[bsp_gpio] GPIO注册失败: 实例数量超限, used:%u, limit:%u",
+                 (unsigned int)idx,
+                 (unsigned int)GPIO_MX_DEVICE_NUM);
         return NULL;
     }
 
+    if (GPIO_config->exti_mode != GPIO_EXTI_MODE_NONE &&
+        GPIOFindEXTIInstance(GPIO_config->GPIO_Pin) != NULL)
+    {
+        __set_PRIMASK(primask);
+        LOGERROR("[bsp_gpio] GPIO注册失败: EXTI引脚重复, pin:0x%x",
+                 (unsigned int)GPIO_config->GPIO_Pin);
+        return NULL;
+    }
+
+    GPIOInstance *ins = &gpio_instance_pool[idx];
     memset(ins, 0, sizeof(GPIOInstance));
 
     ins->GPIOx = GPIO_config->GPIOx;
@@ -105,29 +133,6 @@ GPIOInstance *GPIORegister(GPIO_Init_Config_s *GPIO_config)
     ins->id = GPIO_config->id;
     ins->gpio_model_callback = GPIO_config->gpio_model_callback;
 
-    // 注册表会在EXTI中断回调中被读取,这里只保护发布实例的极短临界区
-    uint32_t primask = __get_PRIMASK();
-    __disable_irq();
-
-    if (idx >= GPIO_MX_DEVICE_NUM)
-    {
-        __set_PRIMASK(primask);
-        free(ins);
-        LOGERROR("[bsp_gpio] GPIO注册失败: 实例数量超限, used:%u, limit:%u",
-                 (unsigned int)idx,
-                 (unsigned int)GPIO_MX_DEVICE_NUM);
-        return NULL;
-    }
-
-    if (ins->exti_mode != GPIO_EXTI_MODE_NONE && GPIOFindEXTIInstance(ins->GPIO_Pin) != NULL)
-    {
-        __set_PRIMASK(primask);
-        free(ins);
-        LOGERROR("[bsp_gpio] GPIO注册失败: EXTI引脚重复, pin:0x%x",
-                 (unsigned int)GPIO_config->GPIO_Pin);
-        return NULL;
-    }
-
     gpio_instance[idx] = ins;
     idx++;
 
@@ -136,7 +141,7 @@ GPIOInstance *GPIORegister(GPIO_Init_Config_s *GPIO_config)
 }
 
 // ----------------- GPIO API -----------------
-// 都是对HAL的形式上的封装,后续考虑增加GPIO state变量,可以直接读取state
+// 以下接口是对HAL GPIO读写的薄封装,统一使用GPIOInstance作为上层访问入口。
 
 void GPIOToggle(GPIOInstance *_instance)
 {

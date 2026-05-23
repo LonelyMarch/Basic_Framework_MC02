@@ -5,7 +5,7 @@
  * @author modified by Neo with annotation
  * @version V1.1.0
  * @date    2022/3/8
- * @brief
+ * @brief DWT高精度时间轴、短延时和CYCCNT 64位扩展实现
  */
 
 #include "bsp_dwt.h"

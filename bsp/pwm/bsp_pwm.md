@@ -1,88 +1,57 @@
-# bsp pwm
+# bsp_pwm
 
-`bsp_pwm` 对 STM32 HAL 的 PWM 接口做了一层注册式封装。上层模块通过 `PWMRegister()` 注册一个 `PWMInstance`，之后使用该实例设置周期、占空比、启停 PWM 或启动 PWM DMA。
+`bsp_pwm` 封装 TIM PWM 输出,负责实例注册、PWM 启停、周期设置、占空比设置和 PWM DMA 完成回调分发。
 
-## 基本流程
-
-1. 在 CubeMX 中完成对应 TIM、PWM Channel、GPIO 复用、Prescaler、DMA 等底层配置。
-2. 在模块初始化阶段填写 `PWM_Init_Config_s`。
-3. 调用 `PWMRegister()` 注册实例。
-4. 调用 `PWMSetPeriod()`、`PWMSetDutyRatio()`、`PWMStart()`、`PWMStop()` 或 `PWMStartDMA()` 控制 PWM。
-
-示例：
+## 注册
 
 ```c
-PWM_Init_Config_s config = {
-    .htim = &htim12,
-    .channel = TIM_CHANNEL_2,
+PWM_Init_Config_s conf = {
+    .htim = &htim3,
+    .channel = TIM_CHANNEL_4,
     .period = 0.001f,
-    .dutyratio = 0.0f,
-    .callback = NULL,
-    .id = NULL,
+    .dutyratio = 0.5f,
 };
 
-PWMInstance *pwm = PWMRegister(&config);
-PWMSetDutyRatio(pwm, 0.5f);
+PWMInstance *pwm = PWMRegister(&conf);
 ```
 
-## 配置结构体
-
-`PWM_Init_Config_s` 字段含义：
-
-- `htim`：CubeMX 生成的 TIM 句柄，例如 `&htim3`、`&htim12`。
-- `channel`：PWM 通道，例如 `TIM_CHANNEL_1`、`TIM_CHANNEL_4`。
-- `period`：PWM 周期，单位为秒。
-- `dutyratio`：初始占空比，范围为 `0~1`。
-- `callback`：PWM DMA 传输完成回调函数，不使用 DMA 时可设为 `NULL`。
-- `id`：上层模块自定义指针，用于保存父对象或用户数据。
+注册成功后 BSP 会启动对应 PWM 通道,并按配置设置周期和占空比。实例控制结构体来自静态池。
 
 ## 周期与占空比
 
-`PWMSetPeriod()` 的 `period` 单位是秒。函数会根据 TIM 所在 APB 总线、当前 RCC 时钟、TIMPRE 规则和定时器 Prescaler 计算 ARR。
-
-定时器实际周期关系为：
-
-```text
-PWM周期 = (ARR + 1) / 定时器计数频率
+```c
+void PWMSetPeriod(PWMInstance *pwm, float period);
+void PWMSetDutyRatio(PWMInstance *pwm, float dutyratio);
 ```
 
-`PWMSetDutyRatio()` 的 `dutyratio` 使用 `0~1` 语义：
+`period` 单位为秒。BSP 会根据 TIM 所在 APB 时钟域、APB 分频和 TIMPRE 规则计算定时器输入时钟。
 
-- 小于等于 `0` 时输出 `0%`。
-- 大于等于 `1` 时输出 `100%`。
-- 中间值按 `(ARR + 1) * dutyratio` 写入 CCR。
+定时器实际周期为 `(ARR + 1) / counter_clk`,因此 BSP 设置 ARR 时会按目标 tick 数减 1。
 
-如果同一个 TIM 下有多个 PWM 通道，修改其中一个实例的周期会改变该 TIM 的 ARR，因此会影响同一个 TIM 下的其他 PWM 通道。
+`dutyratio` 范围为 `0~1`。小于等于 0 输出 0%,大于等于 1 输出 100%。
 
 ## 定时器支持
 
-当前代码按 STM32H723 的普通 PWM TIM 进行时钟归类：
+当前按 STM32H723 的定时器分布识别 APB1/APB2 PWM 定时器,并用 `#ifdef TIMx` 保护不同芯片头文件中的定时器宏。
 
-- APB1：`TIM2`、`TIM3`、`TIM4`、`TIM5`、`TIM12`、`TIM13`、`TIM14`、`TIM23`、`TIM24`
-- APB2：`TIM1`、`TIM8`、`TIM15`、`TIM16`、`TIM17`
+32 位定时器会按 32 位 ARR 计算周期上限,其余定时器按 16 位 ARR 计算。
 
-其中 `TIM2`、`TIM5`、`TIM23`、`TIM24` 按 32 位 ARR 处理，其余普通 PWM TIM 按 16 位 ARR 处理。
-
-`TIM6/TIM7` 是 basic timer，没有 PWM 输出通道；`LPTIMx` 不属于当前 `TIM_HandleTypeDef + HAL_TIM_PWM_Start()` 封装路径。
-
-## DMA 回调
-
-使用 `PWMStartDMA()` 时，需要在 CubeMX 中为对应 TIM Channel 配置 DMA，并保证 DMA 传输数据宽度和 `pData` 指向的数据宽度一致。
-
-HAL 的 `HAL_TIM_PWM_PulseFinishedCallback()` 会遍历已注册的 `PWMInstance`，根据 TIM 句柄和通道匹配来源。如果实例配置了 `callback`，则调用：
+## DMA输出
 
 ```c
-pwm_instance->callback(pwm_instance);
+void PWMStartDMA(PWMInstance *pwm, uint32_t *pData, uint32_t Size);
 ```
 
-注意：PWM DMA 传输中如果占空比数据为 0，可能不会产生预期的 PWM 脉冲完成行为，应结合具体 TIM/DMA 配置确认。
+PWM DMA 完成后,HAL 回调会根据 `TIM_HandleTypeDef` 和通道找到对应 `PWMInstance`,再调用注册时传入的 `callback`。
 
-## FreeRTOS 注意事项
+DMA 数据宽度需要和 CubeMX 中定时器 DMA 配置一致。
 
-`PWMRegister()` 内部会把实例保存到全局注册表，当前注册表容量为 `PWM_DEVICE_CNT`。注册表写入时使用极短临界区保护 `idx` 和实例数组，避免多个任务同时注册 PWM 时写乱全局表。
+## FreeRTOS约束
 
-建议仍然尽量在系统初始化阶段完成 PWM 注册；任务运行期间可以调用 `PWMSetDutyRatio()`、`PWMSetPeriod()` 等接口更新输出。
+PWM 注册通常在模块初始化阶段完成。注册表发布时使用短临界区,避免中断回调读到半初始化实例。
 
-## 错误处理
+## 注意事项
 
-当前模块会检查空指针、实例数量、内存申请、未知定时器、HAL 启停失败、非法周期、DMA 参数等异常，并通过 `LOGERROR` 输出错误信息。部分初始化失败会调用 `Error_Handler()`。
+- PWM 引脚复用、TIM 基本参数和 DMA 通道仍由 CubeMX 配置。
+- 不建议在 PWM DMA 完成回调中执行耗时逻辑。
+- 注册失败或硬件启动失败属于初始化阶段严重错误,当前会输出日志并进入 `Error_Handler()`。

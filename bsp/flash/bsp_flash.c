@@ -1,10 +1,13 @@
 #include "bsp_flash.h"
 
 #include "bsp_log.h"
-#include "cmsis_os2.h"
+#include "FreeRTOS.h"
+#include "semphr.h"
+#include "task.h"
 #include <string.h>
 
-static osMutexId_t bsp_flash_mutex = NULL;
+static StaticSemaphore_t bsp_flash_mutex_cb;
+static SemaphoreHandle_t bsp_flash_mutex = NULL;
 static uint32_t bsp_flash_last_error = 0U;
 
 static int8_t BSP_Flash_Lock(uint32_t timeout);
@@ -19,10 +22,21 @@ static void BSP_Flash_InvalidateCache(uint32_t address, uint32_t size);
 /**
  * @brief 初始化片上Flash BSP
  *
- * @note 本函数不擦除、不写入Flash。调度器运行后,互斥锁会在首次访问时创建。
+ * @note 本函数不擦除、不写入Flash,只创建静态递归互斥锁。
+ *       互斥锁不依赖FreeRTOS heap,可在调度器启动前创建。
  */
 int8_t BSP_Flash_Init(void)
 {
+    if (bsp_flash_mutex == NULL)
+    {
+        bsp_flash_mutex = xSemaphoreCreateRecursiveMutexStatic(&bsp_flash_mutex_cb);
+        if (bsp_flash_mutex == NULL)
+        {
+            LOGERROR("[bsp_flash] mutex create failed");
+            return BSP_FLASH_ERROR_MUTEX;
+        }
+    }
+
     return BSP_FLASH_OK;
 }
 
@@ -51,7 +65,7 @@ int8_t BSP_Flash_Read(uint32_t offset, void *buffer, uint32_t size)
         return BSP_FLASH_OK;
     }
 
-    lock_state = BSP_Flash_Lock(osWaitForever);
+    lock_state = BSP_Flash_Lock(UINT32_MAX);
     if (lock_state < 0)
     {
         return lock_state;
@@ -85,7 +99,7 @@ int8_t BSP_Flash_Erase(uint32_t offset, uint32_t size)
         return BSP_FLASH_OK;
     }
 
-    lock_state = BSP_Flash_Lock(osWaitForever);
+    lock_state = BSP_Flash_Lock(UINT32_MAX);
     if (lock_state < 0)
     {
         return lock_state;
@@ -161,7 +175,7 @@ int8_t BSP_Flash_Write(uint32_t offset, const void *buffer, uint32_t size)
         return BSP_FLASH_OK;
     }
 
-    lock_state = BSP_Flash_Lock(osWaitForever);
+    lock_state = BSP_Flash_Lock(UINT32_MAX);
     if (lock_state < 0)
     {
         return lock_state;
@@ -245,52 +259,26 @@ uint32_t BSP_Flash_GetLastError(void)
 
 static int8_t BSP_Flash_Lock(uint32_t timeout)
 {
-    osKernelState_t kernel_state;
-    const osMutexAttr_t mutex_attr = {
-        .name = "bsp_flash",
-        .attr_bits = osMutexRecursive | osMutexPrioInherit,
-    };
+    TickType_t timeout_ticks;
 
     if (__get_IPSR() != 0U)
     {
-        LOGERROR("[bsp_flash] cannot access flash in ISR");
         return BSP_FLASH_ERROR_IN_ISR;
     }
 
-    kernel_state = osKernelGetState();
-    if (kernel_state != osKernelRunning)
+    if (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING)
     {
         return 0;
     }
 
     if (bsp_flash_mutex == NULL)
     {
-        int32_t kernel_lock = osKernelLock();
-        if (kernel_lock < 0)
-        {
-            LOGERROR("[bsp_flash] kernel lock failed");
-            return BSP_FLASH_ERROR_MUTEX;
-        }
-
-        if (bsp_flash_mutex == NULL)
-        {
-            bsp_flash_mutex = osMutexNew(&mutex_attr);
-        }
-
-        if (osKernelRestoreLock(kernel_lock) < 0)
-        {
-            LOGERROR("[bsp_flash] kernel restore lock failed");
-            return BSP_FLASH_ERROR_MUTEX;
-        }
-
-        if (bsp_flash_mutex == NULL)
-        {
-            LOGERROR("[bsp_flash] mutex create failed");
-            return BSP_FLASH_ERROR_MUTEX;
-        }
+        LOGERROR("[bsp_flash] mutex not initialized");
+        return BSP_FLASH_ERROR_MUTEX;
     }
 
-    if (osMutexAcquire(bsp_flash_mutex, timeout) != osOK)
+    timeout_ticks = (timeout == UINT32_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(timeout);
+    if (xSemaphoreTakeRecursive(bsp_flash_mutex, timeout_ticks) != pdPASS)
     {
         LOGERROR("[bsp_flash] mutex acquire timeout");
         return BSP_FLASH_ERROR_MUTEX;
@@ -303,7 +291,7 @@ static void BSP_Flash_Unlock(int8_t lock_state)
 {
     if ((lock_state > 0) && (bsp_flash_mutex != NULL))
     {
-        if (osMutexRelease(bsp_flash_mutex) != osOK)
+        if (xSemaphoreGiveRecursive(bsp_flash_mutex) != pdPASS)
         {
             LOGERROR("[bsp_flash] mutex release failed");
         }

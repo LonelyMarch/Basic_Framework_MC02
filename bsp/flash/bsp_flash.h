@@ -1,3 +1,7 @@
+/**
+ * @file bsp_flash.h
+ * @brief STM32H723片上Flash用户区读写BSP封装。
+ */
 #ifndef BSP_FLASH_H
 #define BSP_FLASH_H
 
@@ -29,7 +33,7 @@ extern uint8_t __user_flash_end__;
 /**
  * @brief 初始化片上Flash BSP
  *
- * @note 当前实现不主动擦写Flash,只在RTOS运行后按需创建互斥锁。
+ * @note 当前实现不主动擦写Flash,只创建静态递归互斥锁。
  *
  * @retval BSP_FLASH_OK 初始化成功
  */

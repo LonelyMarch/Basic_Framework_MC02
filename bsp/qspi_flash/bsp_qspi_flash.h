@@ -1,3 +1,7 @@
+/**
+ * @file bsp_qspi_flash.h
+ * @brief 板载W25Q64外部Flash的OSPI/QSPI模式BSP封装。
+ */
 #ifndef BSP_QSPI_FLASH_H
 #define BSP_QSPI_FLASH_H
 

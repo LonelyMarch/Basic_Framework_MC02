@@ -10,14 +10,14 @@
  */
 #include "bsp_usart.h"
 #include "bsp_log.h"
-#include "stdlib.h"
+#include "bsp_service.h"
 #include "memory.h"
 
 #define USART_DCACHE_LINE_SIZE 32U
 
-/* usart service instance, modules' info would be recoreded here using USARTRegister() */
-/* usart服务实例,所有注册了usart的模块信息会被保存在这里 */
+/* USART服务实例表,所有通过USARTRegister()注册的模块信息都会保存在这里。 */
 static uint8_t idx;
+static USARTInstance usart_instance_pool[DEVICE_USART_CNT]; // USART实例静态池,控制结构体放默认.bss/DTCM
 static USARTInstance *usart_instance[DEVICE_USART_CNT] = {NULL};
 
 /*
@@ -29,6 +29,7 @@ static uint8_t usart_rx_dma_buffer[DEVICE_USART_CNT][USART_RXBUFF_LIMIT]
 static uint8_t usart_tx_dma_buffer[DEVICE_USART_CNT][USART_TXBUFF_LIMIT]
     __attribute__((section(".dma_buffer"), aligned(32)));
 static uint8_t usart_parse_buffer[DEVICE_USART_CNT][USART_PARSE_BUFF_CNT][USART_RXBUFF_LIMIT];
+static uint16_t usart_parse_len[DEVICE_USART_CNT][USART_PARSE_BUFF_CNT];
 
 static void USARTAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *aligned_address, int32_t *aligned_size)
 {
@@ -120,7 +121,6 @@ static void USARTReleaseTx(USARTInstance *_instance)
 static void USARTSaveReceivedFrame(USARTInstance *_instance, uint16_t size)
 {
     uint16_t copy_size;
-    uint8_t write_idx;
 
     if (_instance == NULL || size == 0)
         return;
@@ -137,18 +137,13 @@ static void USARTSaveReceivedFrame(USARTInstance *_instance, uint16_t size)
         USARTInvalidateDCacheByAddr(_instance->rx_dma_buff, copy_size);
     }
 
-    if (_instance->pending_frame_cnt >= USART_PARSE_BUFF_CNT)
+    if (BSPFrameQueuePush(&_instance->rx_queue, _instance->rx_dma_buff, copy_size) == 0U)
     {
-        // 任务还没处理完两帧缓存时,继续保留旧数据,丢弃新帧以避免覆盖正在解析的数据。
-        _instance->dropped_frame_cnt++;
         return;
     }
 
-    write_idx = _instance->parse_write_idx;
-    memcpy(_instance->parse_buff[write_idx], _instance->rx_dma_buff, copy_size);
-    _instance->parse_len[write_idx] = copy_size;
-    _instance->parse_write_idx = (write_idx + 1U) % USART_PARSE_BUFF_CNT;
-    _instance->pending_frame_cnt++;
+    // 已经有完整帧等待任务解析,立即唤醒BSP服务任务,避免依赖固定1ms轮询。
+    BSPServiceNotify();
 }
 
 static void USARTStartReceive(USARTInstance *_instance)
@@ -157,7 +152,10 @@ static void USARTStartReceive(USARTInstance *_instance)
 
     if (_instance == NULL || _instance->usart_handle == NULL)
     {
-        LOGERROR("[bsp_usart] USART receive start with null instance or handle");
+        if (__get_IPSR() == 0U)
+        {
+            LOGERROR("[bsp_usart] USART receive start with null instance or handle");
+        }
         return;
     }
 
@@ -177,15 +175,22 @@ static void USARTStartReceive(USARTInstance *_instance)
 
     if (status != HAL_OK)
     {
-        LOGWARNING("[bsp_usart] USART receive start failed, status [%d]", status);
+        if (__get_IPSR() != 0U)
+        {
+            _instance->error_count++;
+        }
+        else
+        {
+            LOGWARNING("[bsp_usart] USART receive start failed, status [%d]", status);
+        }
     }
 }
 
 /**
- * @brief 启动串口服务,会在每个实例注册之后自动启用接收,当前实现为DMA接收,后续可能添加IT和BLOCKING接收
+ * @brief 启动串口接收服务。
  *
- * @todo 串口服务会在每个实例注册之后自动启用接收,当前实现为DMA接收,后续可能添加IT和BLOCKING接收
- *       可能还要将此函数修改为extern,使得module可以控制串口的启停
+ * @note 注册成功后会自动调用本函数。若串口配置了RX DMA,使用ReceiveToIdle DMA;
+ *       未配置RX DMA但开启了UART全局中断时,使用ReceiveToIdle IT。
  *
  * @param _instance instance owned by module,模块拥有的串口实例
  */
@@ -224,13 +229,7 @@ USARTInstance *USARTRegister(USART_Init_Config_s *init_config)
         }
     }
 
-    USARTInstance *instance = (USARTInstance *)malloc(sizeof(USARTInstance));
-    if (instance == NULL)
-    {
-        LOGERROR("[bsp_usart] USART instance malloc failed!");
-        return NULL;
-    }
-
+    USARTInstance *instance = &usart_instance_pool[idx];
     memset(instance, 0, sizeof(USARTInstance));
 
     instance->usart_handle = init_config->usart_handle;
@@ -238,22 +237,21 @@ USARTInstance *USARTRegister(USART_Init_Config_s *init_config)
     instance->module_callback = init_config->module_callback;
     instance->rx_dma_buff = usart_rx_dma_buffer[idx];
     instance->tx_dma_buff = usart_tx_dma_buffer[idx];
-    for (uint8_t i = 0; i < USART_PARSE_BUFF_CNT; i++)
-    {
-        instance->parse_buff[i] = usart_parse_buffer[idx][i];
-    }
-    instance->recv_buff = instance->parse_buff[0];
+    instance->recv_buff = usart_parse_buffer[idx][0];
+    BSPFrameQueueInit(&instance->rx_queue,
+                      &usart_parse_buffer[idx][0][0],
+                      usart_parse_len[idx],
+                      USART_PARSE_BUFF_CNT,
+                      USART_RXBUFF_LIMIT);
     // .dma_buffer段为NOLOAD,上电后内容不保证为0,注册时主动清空保持旧版buffer语义。
     memset(instance->rx_dma_buff, 0, USART_RXBUFF_LIMIT);
     memset(instance->tx_dma_buff, 0, USART_TXBUFF_LIMIT);
-    memset(usart_parse_buffer[idx], 0, sizeof(usart_parse_buffer[idx]));
 
     usart_instance[idx++] = instance;
     USARTServiceInit(instance);
     return instance;
 }
 
-/* @todo 当前仅进行了形式上的封装,后续要进一步考虑是否将module的行为与bsp完全分离 */
 HAL_StatusTypeDef USARTSend(USARTInstance *_instance, uint8_t *send_buf, uint16_t send_size, USART_TRANSFER_MODE mode)
 {
     HAL_StatusTypeDef status = HAL_OK;
@@ -361,10 +359,18 @@ uint8_t USARTIsReady(USARTInstance *_instance)
     return (_instance->tx_busy == 0) && (_instance->usart_handle->gState == HAL_UART_STATE_READY);
 }
 
+uint32_t USARTGetErrorCount(USARTInstance *_instance)
+{
+    if (_instance == NULL)
+        return 0U;
+
+    return _instance->error_count;
+}
+
 void USARTProcess(void)
 {
     USARTInstance *instance;
-    uint8_t read_idx;
+    uint8_t *recv_buff;
     uint16_t recv_len;
 
     for (uint8_t i = 0; i < idx; ++i)
@@ -373,11 +379,9 @@ void USARTProcess(void)
         if (instance == NULL)
             continue;
 
-        while (instance->pending_frame_cnt > 0)
+        while (BSPFrameQueuePeek(&instance->rx_queue, &recv_buff, &recv_len) != 0U)
         {
-            read_idx = instance->parse_read_idx;
-            recv_len = instance->parse_len[read_idx];
-            instance->recv_buff = instance->parse_buff[read_idx];
+            instance->recv_buff = recv_buff;
             instance->recv_len = recv_len;
 
             if (instance->module_callback != NULL)
@@ -388,19 +392,10 @@ void USARTProcess(void)
 
             /*
              * 当前帧处理完之后再释放解析缓冲,避免ISR在回调执行期间覆盖正在解析的数据。
-             * 清空数据本身不需要关中断;只有更新读索引和待处理计数需要很短的临界区。
+             * 清空数据本身不需要关中断;读索引和待处理计数由公共帧队列维护。
              */
-            memset(instance->parse_buff[read_idx], 0, recv_len);
-
-            uint32_t primask = __get_PRIMASK();
-            __disable_irq();
-            if (instance->pending_frame_cnt > 0)
-            {
-                instance->parse_len[read_idx] = 0;
-                instance->parse_read_idx = (read_idx + 1U) % USART_PARSE_BUFF_CNT;
-                instance->pending_frame_cnt--;
-            }
-            __set_PRIMASK(primask);
+            memset(recv_buff, 0, recv_len);
+            BSPFrameQueuePop(&instance->rx_queue);
         }
     }
 }
@@ -419,12 +414,12 @@ void USARTProcess(void)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
     for (uint8_t i = 0; i < idx; ++i)
-    { // find the instance which is being handled
+    {
         if (huart == usart_instance[i]->usart_handle)
-        { // call the callback function if it is not NULL
+        {
             USARTSaveReceivedFrame(usart_instance[i], Size);
             USARTStartReceive(usart_instance[i]);
-            return; // break the loop
+            return;
         }
     }
 }
@@ -442,9 +437,9 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
     {
         if (huart == usart_instance[i]->usart_handle)
         {
+            usart_instance[i]->error_count++;
             USARTReleaseTx(usart_instance[i]);
             USARTStartReceive(usart_instance[i]);
-            LOGWARNING("[bsp_usart] USART error callback triggered, instance idx [%d]", i);
             return;
         }
     }

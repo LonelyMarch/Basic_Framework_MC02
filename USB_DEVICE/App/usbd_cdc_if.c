@@ -22,6 +22,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
+#include "bsp_usb.h"
 
 /* USER CODE END INCLUDE */
 
@@ -264,6 +265,17 @@ static int8_t CDC_Control_HS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_HS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 11 */
+  /*
+   * USB CDC接收回调运行在USB中断上下文。
+   * 这里不直接解析协议,只把收到的数据交给bsp_usb缓存,
+   * 后续由USBProcess()在任务上下文中调用上层接收回调。
+   */
+  USB_CDC_RxCpltCallback(Buf, *Len);
+
+  /*
+   * 重新挂接下一次OUT端点接收。
+   * Buf当前指向UserRxBufferHS,继续复用CubeMX生成的接收缓冲即可。
+   */
   USBD_CDC_SetRxBuffer(&hUsbDeviceHS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceHS);
   return (USBD_OK);
@@ -282,6 +294,16 @@ uint8_t CDC_Transmit_HS(uint8_t* Buf, uint16_t Len)
   uint8_t result = USBD_OK;
   /* USER CODE BEGIN 12 */
   USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceHS.pClassData;
+
+  /*
+   * USB未枚举或CDC类数据尚未创建时,pClassData可能为空。
+   * 直接访问hcdc->TxState会导致空指针访问,因此发送前必须先检查设备状态。
+   */
+  if (hUsbDeviceHS.dev_state != USBD_STATE_CONFIGURED || hcdc == NULL)
+  {
+    return USBD_BUSY;
+  }
+
   if (hcdc->TxState != 0){
     return USBD_BUSY;
   }
@@ -310,6 +332,12 @@ static int8_t CDC_TransmitCplt_HS(uint8_t *Buf, uint32_t *Len, uint8_t epnum)
   UNUSED(Buf);
   UNUSED(Len);
   UNUSED(epnum);
+
+  /*
+   * 通知bsp_usb释放发送忙标志。
+   * 该回调处于USB中断上下文,上层tx_callback只能做轻量标志位操作。
+   */
+  USB_CDC_TxCpltCallback();
   /* USER CODE END 14 */
   return result;
 }

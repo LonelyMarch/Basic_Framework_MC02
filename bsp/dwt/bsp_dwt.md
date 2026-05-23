@@ -1,93 +1,56 @@
 # bsp_dwt
 
-DWT 是 Cortex-M 内核中的调试计数单元，本模块使用 `DWT->CYCCNT` 作为高精度时间基准，用于计算时间间隔、获取系统运行时间轴以及进行短时间忙等待延时。
+`bsp_dwt` 使用 Cortex-M7 内核的 `DWT->CYCCNT` 作为高精度时间基准,用于时间间隔测量、系统运行时间轴和短时间忙等待延时。
 
 ## 初始化
-
-使用前需要先初始化 DWT，传入 CPU 内核频率，单位为 MHz：
 
 ```c
 DWT_Init(SystemCoreClock / 1000000U);
 ```
 
-`DWT->CYCCNT` 按 CPU cycle 计数，不是按 RTOS tick 计数，因此 DWT 时间不依赖 FreeRTOS 调度。
+参数单位为 MHz。当前由 `BSPInit()` 使用 `SystemCoreClock` 自动换算,避免系统主频调整后忘记同步修改。
 
-## 常用功能
-
-### 计算两次进入同一个函数的时间间隔
+## 时间接口
 
 ```c
-static uint32_t cnt;
-float deltaT;
-
-deltaT = DWT_GetDeltaT(&cnt);
+float DWT_GetDeltaT(uint32_t *cnt_last);
+double DWT_GetDeltaT64(uint32_t *cnt_last);
+float DWT_GetTimeline_s(void);
+float DWT_GetTimeline_ms(void);
+uint64_t DWT_GetTimeline_us(void);
 ```
 
-如果需要更高精度的返回值，可以使用：
+`DWT_GetDeltaT()` 适合计算周期任务的 `dt`。`DWT_GetTimeline_us()` 使用 64 位时间轴,更适合长时间运行后的微秒时间戳。
+
+## 64位时间轴
+
+STM32H723 在 480MHz 下,32 位 `CYCCNT` 大约 8.95s 溢出一次。BSP 内部用溢出扩展维护 64 位 cycle 计数,并在极短临界区内完成读取和溢出判断,避免任务/中断并发读取时出现时间轴跳变。
+
+TIM6 当前用于每 1s 调用一次 `DWT_SysTimeUpdate()`,防止系统长时间没有主动读取 DWT 时漏记 `CYCCNT` 溢出。
+
+## 短延时
 
 ```c
-static uint32_t cnt;
-double deltaT;
-
-deltaT = DWT_GetDeltaT64(&cnt);
+DWT_Delay(0.0005f);
 ```
 
-### 获取当前运行时间
+`DWT_Delay()` 是忙等待,适合初始化阶段、关中断场景和 us/ms 级短时序。FreeRTOS 任务中需要较长等待时,应优先使用 `osDelay()` 或状态机。
+
+单次忙等待不能跨越过长时间。当前实现会限制过长延时并输出错误日志。
+
+## 调试宏
 
 ```c
-float time_s;
-float time_ms;
-uint64_t time_us;
-
-time_s = DWT_GetTimeline_s();
-time_ms = DWT_GetTimeline_ms();
-time_us = DWT_GetTimeline_us();
+float dt;
+TIME_ELAPSE(dt, {
+    SomeFunction();
+});
 ```
 
-`DWT_GetTimeline_s()` 和 `DWT_GetTimeline_ms()` 返回 `float`，适合调试和短时间计时；`DWT_GetTimeline_us()` 返回 `uint64_t`，适合需要整数微秒时间戳的场景。
+`TIME_ELAPSE()` 会计算代码块耗时并通过 BSP 日志输出,适合临时调试。高频路径中不建议长期保留该宏。
 
-### 计算执行某部分代码的耗时
+## 注意事项
 
-```c
-float start, dt;
-
-start = DWT_GetTimeline_ms();
-
-// some proc to go...
-for (uint8_t i = 0; i < 10; i++)
-{
-    foo();
-}
-
-dt = DWT_GetTimeline_ms() - start;
-```
-
-也可以使用 `TIME_ELAPSE` 宏进行调试计时：
-
-```c
-static float my_func_dt;
-
-TIME_ELAPSE(my_func_dt,
-            Function1(vara);
-            Function2(some, var);
-            Function3(your, param);
-);
-```
-
-### 短时间延时
-
-```c
-DWT_Delay(0.001f); // 延时 1ms
-```
-
-`DWT_Delay()` 是忙等待延时，适合初始化阶段、关中断场景以及 us/ms 级短时序等待。它不会让出 CPU，因此在 FreeRTOS 任务中进行较长延时时，应优先使用 `osDelay()` 或状态机。
-
-当前实现会对非正数延时直接返回；如果传入过长延时，会打印错误日志并截断到安全上限，避免超过 `CYCCNT` 计数范围后卡死。
-
-### 维护 DWT 长时间轴
-
-```c
-DWT_SysTimeUpdate();
-```
-
-`DWT_SysTimeUpdate()` 用于刷新 `CYCCNT` 溢出计数。如果系统长时间不调用任何 DWT 时间接口，需要周期性调用该函数，确保 64 位扩展时间轴能够正确记录 `CYCCNT` 溢出。
+- DWT 是内核计数器,不依赖外设定时器引脚。
+- 该模块不负责 FreeRTOS tick,也不替代系统调度延时。
+- `DWT_SysTimeUpdate()` 只维护时间轴,不应放入耗时逻辑。

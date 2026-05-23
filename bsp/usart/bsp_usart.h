@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "main.h"
+#include "bsp_frame_queue.h"
 
 #define DEVICE_USART_CNT 8     // MC02串口数量8个，其中
 #define USART_RXBUFF_LIMIT 256 // 如果协议需要更大的接收buff,请修改这里
@@ -32,13 +33,9 @@ typedef struct
     uint8_t *recv_buff;                    // 当前供module解析使用的buffer,在USARTProcess()中切换
     uint8_t *rx_dma_buff;                  // UART DMA/IT接收buffer,实际存放在RAM_D2的.dma_buffer段
     uint8_t *tx_dma_buff;                  // DMA发送buffer,实际存放在RAM_D2的.dma_buffer段
-    uint8_t *parse_buff[USART_PARSE_BUFF_CNT]; // 双解析缓冲,任务上下文解析时使用
     volatile uint16_t recv_len;            // 最近一次接收到的数据长度
-    volatile uint16_t parse_len[USART_PARSE_BUFF_CNT]; // 双解析缓冲各自对应的数据长度
-    volatile uint8_t parse_write_idx;      // ISR写入的解析缓冲索引
-    volatile uint8_t parse_read_idx;       // 任务读取的解析缓冲索引
-    volatile uint8_t pending_frame_cnt;    // 等待任务处理的帧数量
-    volatile uint8_t dropped_frame_cnt;    // 解析任务来不及处理时丢弃的帧计数
+    BSPFrameQueue rx_queue;                // 接收帧缓存队列,中断写入,任务读取
+    volatile uint32_t error_count;          // 串口错误回调触发次数
     volatile uint8_t tx_busy;              // IT/DMA/阻塞发送占用标志,防止重复发送覆盖TX缓冲
     uint16_t recv_buff_size;               // 模块接收一包数据的大小,最大值由USART_RXBUFF_LIMIT限制
     UART_HandleTypeDef *usart_handle;      // 实例对应的usart_handle
@@ -76,9 +73,8 @@ void USARTProcess(void);
 
 /**
  * @brief 通过调用该函数可以发送一帧数据,需要传入一个usart实例,发送buff以及这一帧的长度
- * @note 在短时间内连续调用此接口,若采用IT/DMA会导致上一次的发送未完成而新的发送取消.
- * @note 若希望连续使用DMA/IT进行发送,请配合USARTIsReady()使用,或自行为你的module实现一个发送队列和任务.
- * @todo 是否考虑为USARTInstance增加发送队列以进行连续发送?
+ * @note IT/DMA发送是异步启动,若上一次发送未完成会返回HAL_BUSY。
+ *       高频连续发送场景应由上层根据USARTIsReady()节流,或后续在USART BSP中增加发送队列。
  * 
  * @param _instance 串口实例
  * @param send_buf 待发送数据的buffer
@@ -94,5 +90,12 @@ HAL_StatusTypeDef USARTSend(USARTInstance *_instance, uint8_t *send_buf, uint16_
  * @return uint8_t ready 1, busy 0
  */
 uint8_t USARTIsReady(USARTInstance *_instance);
+
+/**
+ * @brief 获取串口错误回调触发次数
+ *
+ * @note 该计数在HAL_UART_ErrorCallback()中递增,用于避免中断里直接输出日志。
+ */
+uint32_t USARTGetErrorCount(USARTInstance *_instance);
 
 #endif

@@ -1,127 +1,86 @@
 # bsp_can
 
-<p align='right'>neozng1@hnu.edu.cn</p>
+`bsp_can` 是 STM32H723 三路 FDCAN 的 BSP 封装。当前工程使用 Classic CAN over FDCAN,单帧数据长度最大 8 字节。
 
-# 请注意使用CAN设备的时候务必保证总线只接入了2个终端电阻！开发板一般都有一个，6020电机、c620/c610电调、LK电机也都有终端电阻，注意把多于2个的全部断开（通过拨码）
+> 使用 CAN 总线时,总线上应只保留两个终端电阻。开发板、电调、电机可能都带终端电阻,需要按实际接线确认。
 
+## 职责边界
 
+- CubeMX 负责 FDCAN 时钟、引脚、FIFO、过滤器数量和中断配置。
+- BSP 负责 CAN 实例注册、过滤器配置、三路 FDCAN 启动、发送互斥、接收队列和模块回调分发。
+- 电机协议、双板通信协议等解析逻辑属于 modules 层,通过 `can_module_callback` 接收数据。
 
-## 使用说明
-
-若你希望新增一个基于CAN的module，首先在该模块下应该有一个包含`CANInstance*`指针的module结构体（或当功能简单的时候，可以是单独存在的`CANInstance*`，但不推荐这样做）。
-
-## 代码结构
-
-.h文件内包括了外部接口和类型定义,以及模块对应的宏。c文件内为私有函数和外部接口的定义。
-
-## 类型定义
+## 注册
 
 ```c
+CAN_Init_Config_s conf = {
+    .can_handle = &hfdcan2,
+    .tx_id = 0x200,
+    .rx_id = 0x201,
+    .can_module_callback = MotorDecode,
+    .id = motor,
+};
 
-#define FDCAN // G系列和H7系列使用FDCAN
-// #define BXCAN // F系列使用BxCAN
-
-#define hcan1 hfdcan1
-#define hcan2 hfdcan2
-#define hcan3 hfdcan3
-
-#define CAN_MX_REGISTER_CNT 32     // 所有FDCAN外设共用的CAN实例注册上限
-#define MX_CAN_FILTER_CNT (3 * 14) // 最多可以使用的CAN过滤器数量,目前远不会用到这么多
-#define DEVICE_CAN_CNT 3           // H723VG有3个FDCAN
-
-/* can instance typedef, every module registered to CAN should have this variable */
-typedef struct _
-{
-    FDCAN_HandleTypeDef *can_handle; // can句柄
-    FDCAN_TxHeaderTypeDef txconf;    // CAN报文发送配置
-    uint32_t tx_id;                // 发送id
-    uint32_t tx_mailbox;           // BxCAN消息填入的邮箱号,FDCAN模式下不使用
-    uint8_t tx_buff[8];            // 发送缓存,发送消息长度可以通过CANSetDLC()设定,最大为8
-    uint8_t rx_buff[8];            // 接收缓存,最大消息长度为8
-    uint32_t rx_id;                // 接收id
-    uint8_t rx_len;                // 接收长度,可能为0-8
-    // 接收的回调函数,用于解析接收到的数据
-    void (*can_module_callback)(struct _ *); // callback needs an instance to tell among registered ones
-    void *id;                                // 使用can外设的模块指针(即id指向的模块拥有此can实例,是父子关系)
-} CANInstance;
-
-typedef struct
-{
-    FDCAN_HandleTypeDef *can_handle;          // can句柄
-    uint32_t tx_id;                           // 发送id
-    uint32_t rx_id;                           // 接收id
-    void (*can_module_callback)(CANInstance *); // 处理接收数据的回调函数
-    void *id;                                 // 拥有can实例的模块地址
-} CAN_Init_Config_s;
+CANInstance *can = CANRegister(&conf);
 ```
 
-- `CAN_MX_REGISTER_CNT`是最大的CAN实例注册数量，当前FDCAN分支下为三路FDCAN共用的全局上限。
-- `MX_CAN_FILTER_CNT`是最大的CAN接收过滤器数量宏。FDCAN实际可用过滤器数量由CubeMX中每路FDCAN的`StdFiltersNbr`决定。
-- `DEVICE_CAN_CNT`是MCU拥有的CAN/FDCAN硬件数量。
+每个 `CANInstance` 保存发送 ID、接收 ID、8 字节发送缓存、8 字节接收缓存和模块回调。模块发送前先写 `instance->tx_buff`,再调用 `CANTransmit()`。
 
-- `CANInstance`是一个CAN实例。注意，CAN作为一个总线设备，一条总线上可以挂载多个设备，因此多个设备可以共享同一个CAN硬件。其成员变量包括发送id，发送配置，发送buff以及接收buff，还有接收id和接收协议解析回调函数。**由于目前使用的是Classic CAN，每个数据帧最大长度为8，因此收发buff长度暂时固定为8**。定义该结构体的时候使用了一个技巧，使得在结构体内部可以用结构体自身的指针作为成员，即`can_module_callback`的定义。
+## 过滤器与FIFO
 
-- `CAN_Init_Config_s`是用于初始化CAN实例的结构，在调用CAN实例的初始化函数时传入（下面介绍函数时详细介绍）。
+注册时 BSP 会根据 `rx_id` 为对应 FDCAN 配置标准 ID 过滤器。当前支持三路 FDCAN,每路维护独立的实例列表和过滤器索引。
 
-- `can_module_callback()`是模块提供给CAN接收中断回调函数使用的协议解析函数指针。对于每个需要CAN的模块，需要定义一个这样的函数用于解包数据。
-- 每个使用CAN外设的module，都需要在其内部定义一个`CANInstance*`。
+CubeMX 中每路 `StdFiltersNbr` 必须不小于该路注册实例数量。若使用两个接收 FIFO,需要在 CubeMX 中同时给 FIFO0/FIFO1 分配元素,并开启对应中断。
 
+## 接收流程
 
-## 外部接口
+FDCAN 接收中断中只做轻量工作:
+
+1. 循环读取当前 FIFO 中已有报文。
+2. 根据 FDCAN 句柄和接收 ID 找到注册实例。
+3. 将帧数据复制到 CAN 内部接收事件队列。
+4. 唤醒高优先级 `CANProcessTask`。
+
+`CANProcessTask` 在任务上下文中取出队列事件,更新对应实例的 `rx_buff/rx_len`,再调用模块注册的 `can_module_callback()`。
+
+这种设计避免在 FDCAN 中断里直接解析电机协议,也避免高速 CAN 接收挤占通用 `BSPServiceTask`。
+
+## 发送流程
+
+```c
+can->tx_buff[0] = value;
+CANTransmit(can, 1.0f);
+```
+
+`CANTransmit()` 会先获取对应 FDCAN 总线的发送互斥锁,再等待 Tx FIFO Queue 有空位。若 FreeRTOS 已运行且超时时间达到毫秒级,等待过程中会 `osDelay(1)` 主动让出 CPU;亚毫秒等待仍使用 DWT 短忙等。
+
+`timeout` 单位为 ms,不应大于调用任务自身周期。
+
+## 接口
 
 ```c
 CANInstance *CANRegister(CAN_Init_Config_s *config);
-void CANSetDLC(CANInstance *_instance, uint8_t length); // 设置发送帧的数据长度
-uint8_t CANTransmit(CANInstance *_instance, float timeout);
+void CANSetDLC(CANInstance *instance, uint8_t length);
+uint8_t CANTransmit(CANInstance *instance, float timeout);
+void CANProcessTask(void *argument);
+uint32_t CANGetDroppedRxEventCount(void);
+uint32_t CANGetFifoLostCount(FDCAN_HandleTypeDef *hfdcan, uint32_t fifo);
+uint32_t CANGetHardwareLostCount(void);
+uint32_t CANGetRxHalErrorCount(void);
+uint32_t CANGetRxInvalidDlcCount(void);
 ```
 
-`CANRegister`是用于初始化CAN实例的接口，module层的模块对象（也应当为一个结构体）内要包含一个`CANInstance*`。调用时传入用于初始化的config，函数返回注册完成后的`CANInstance*`。`CANRegister`应当在module的初始化函数内被调用，推荐config采用以下的方式定义，更加直观明了：
+## 错误统计
 
-```c
-CAN_Init_Config_s config = {
-    .can_handle = &hcan1,
-    .tx_id = 0x005,
-    .rx_id = 0x200,
-    .can_module_callback = MotorCallback,
-};
-```
+- `CANGetDroppedRxEventCount()`: CAN 内部接收事件队列满导致的软件丢帧。
+- `CANGetFifoLostCount()`: 指定硬件 FIFO 的 FDCAN 丢帧计数。
+- `CANGetRxHalErrorCount()`: 中断中 HAL 接收失败次数。
+- `CANGetRxInvalidDlcCount()`: 收到非法 DLC 的次数。
 
-`CANTransmit()`是模块通过其拥有的CAN实例发送数据的接口，调用时传入对应的instance。在发送之前，应当给instance内的`tx_buff`赋值。
-
-## 私有函数和变量
-
-在.c文件内设为static的函数和变量
-
-```c
-static CANInstance *can_instance[CAN_MX_REGISTER_CNT] = {NULL};
-```
-
-这是bsp层管理所有CAN实例的入口。当前所有FDCAN外设共用这一个实例指针数组，接收回调中根据`can_handle`和`rx_id`查找对应实例。
-
-```c
-static void CANServiceInit()
-static void CANAddFilter(CANInstance *_instance)
-static void CANStartFDCANService(FDCAN_HandleTypeDef *hfdcan, uint8_t can_idx, uint32_t rx_active_its)
-static uint8_t FDCANDecodeDLC(uint32_t dlc)
-static void FDCANFIFOxCallback(FDCAN_HandleTypeDef *_hfdcan, uint32_t fifox)
-void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
-void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
-```
-
-- `CANServiceInit()`会被`CANRegister()`调用，对CAN外设进行硬件初始化并开启接收中断和消息提醒。FDCAN模式下会启动FDCAN1、FDCAN2、FDCAN3。
-
-- `CANStartFDCANService()`用于启动单路FDCAN服务，配置FIFO覆盖模式、全局过滤器、启动FDCAN并激活接收通知。若HAL配置失败，会通过日志输出错误并停止运行。
-
-- `CANAddFilter()`在每次使用`CANRegister()`的时候被调用，用于给当前注册的实例添加过滤器规则并设定处理对应`rx_id`的接收FIFO。FDCAN分支会按当前FDCAN句柄分别分配过滤器索引，并检查是否超过CubeMX配置的`StdFiltersNbr`。过滤器按接收ID匹配，奇数`rx_id`进入FIFO0，偶数`rx_id`进入FIFO1。
-
-- `FDCANDecodeDLC()`用于将HAL FDCAN接收头中的`DataLength`宏转换为实际接收字节数。当前Classic CAN配置下支持0到8字节。
-
-- `HAL_FDCAN_RxFifo0Callback()`和`HAL_FDCAN_RxFifo1Callback()`都是对HAL的FDCAN回调函数的重定义，当FIFO0或FIFO1有新消息、满、水位线到达或消息丢失时，对应callback会被调用。`FDCANFIFOxCallback()`随后被前两者调用，并根据接收id和硬件中断来源调用对应的instance的回调函数进行协议解析。`FDCANFIFOxCallback()`会循环取出当前FIFO中的报文，直到FIFO为空。
-
-- 当有一个模块注册了多个can实例时，通过`CANInstance.id`,使用强制类型转换将其转换成对应模块的实例指针，就可以对不同的模块实例进行回调处理了。
+中断上下文不输出日志,只更新计数。
 
 ## 注意事项
 
-由于CAN总线自带发送检测，如果总线上没有挂载目标设备（接收id和发送报文相同的设备），那么发送队列可能会被占满而无法发送。在`CANTransmit()`中会检查发送邮箱或FDCAN Tx FIFO Queue是否空闲。当超出`timeout`之后函数会返回零，说明发送失败。
-
-由于会等待发送邮箱或FDCAN Tx FIFO Queue空闲，调用`CANTransmit()`的任务可能无法按时挂起，导致任务定时不精确。建议在没有连接CAN进行调试时，按需注释掉有关CAN发送的代码部分，或设定一个较小的`timeout`值，防止对其他需要精确定时的任务产生影响。
+- 当前不是 CAN FD 大帧模式,`tx_buff/rx_buff` 固定 8 字节。
+- 若后续启用 CAN FD/BRS,需要同步扩展 DLC 映射、缓存大小、CubeMX element size 和上层协议解析。
+- CAN 注册失败、过滤器不足、FDCAN 启动失败属于初始化阶段严重错误。

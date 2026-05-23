@@ -2,14 +2,6 @@
 #include "bsp_log.h"
 #include "cmsis_os2.h"
 #include "memory.h"
-#include "stdlib.h"
-
-// HAL单次阻塞SPI事务超时时间,单位ms。BMI088等小包通信不应长时间阻塞高优先级任务。
-#define SPI_HAL_TIMEOUT_MS 5U
-// FreeRTOS等待SPI总线互斥锁或异步完成信号的超时时间,单位tick。
-#define SPI_OS_TIMEOUT_TICK 100U
-// SPI DMA内部中转缓冲区大小。当前BMI088单次传输只有几个字节,这里预留到1KB以兼顾后续小型SPI设备。
-#define SPI_DMA_BOUNCE_BUFFER_SIZE 1024U
 
 #define SPI_DCACHE_LINE_SIZE 32U
 
@@ -36,9 +28,11 @@ typedef struct
     HAL_StatusTypeDef last_status;    // 最近一次异步传输结果
     uint8_t *dma_tx_buffer;            // RAM_D2中的DMA发送中转缓冲区
     uint8_t *dma_rx_buffer;            // RAM_D2中的DMA接收中转缓冲区
+    volatile uint8_t os_objects_ready; // mutex/semaphore是否已经完整创建
 } SPIBusResource;
 
 /* 所有的spi instance保存于此,用于callback时判断中断来源*/
+static SPIInstance spi_instance_pool[SPI_MX_INSTANCE_CNT]; // SPI实例静态池,控制结构体放默认.bss/DTCM
 static SPIInstance *spi_instance[SPI_MX_INSTANCE_CNT] = {NULL};
 static SPIBusResource spi_bus[SPI_BUS_CNT] = {0};
 static uint8_t idx = 0;     // 已注册的SPI从设备实例数量
@@ -52,13 +46,13 @@ static uint8_t spi_dma_rx_buffer[SPI_BUS_CNT][SPI_DMA_BOUNCE_BUFFER_SIZE] SPI_DM
  * @brief SPI注册阶段错误处理
  *
  * 注册阶段属于系统基础资源初始化。为了保持原框架“初始化失败立即停机”的语义,
- * 这里先打印错误原因,再进入死循环,避免错误继续扩散到后续业务代码。
+ * 这里先打印错误原因,再进入Error_Handler(),避免错误继续扩散到后续业务代码。
  */
-static void SPIRegisterErrorHandler(const char *error_msg)
+__attribute__((noreturn)) static void SPIRegisterErrorHandler(const char *error_msg)
 {
     LOGERROR("[bsp_spi] SPI注册失败: %s", error_msg);
-    while (1)
-        ;
+    Error_Handler();
+    __builtin_unreachable();
 }
 
 /**
@@ -117,8 +111,8 @@ static SPIInstance *SPIFindInstanceByChipSelect(SPI_HandleTypeDef *handle, GPIO_
 /**
  * @brief 获取或登记一条SPI硬件总线
  *
- * 这里只登记handle,不立即创建mutex/semaphore。当前工程中RobotInit()早于
- * osKernelInitialize()执行,过早创建RTOS对象可能失败,因此RTOS对象在任务态第一次通信时懒创建。
+ * 这里只登记handle,不立即创建mutex/semaphore。RTOS对象由BSPTaskInit()在
+ * osKernelInitialize()之后统一创建；若运行期动态注册新总线,首次访问时会兜底创建。
  *
  * @param handle SPI硬件句柄
  * @return 对应的总线资源
@@ -161,6 +155,39 @@ static HAL_StatusTypeDef SPICheckDmaLength(uint16_t len)
         LOGERROR("[bsp_spi] SPI DMA传输长度超过内部缓冲区: len=%u, limit=%u",
                  (unsigned int)len,
                  (unsigned int)SPI_DMA_BOUNCE_BUFFER_SIZE);
+        return HAL_ERROR;
+    }
+
+    return HAL_OK;
+}
+
+/**
+ * @brief 检查CubeMX是否给当前SPI句柄配置了所需DMA通道
+ *
+ * SPI DMA模式下,不同事务需要的DMA通道不同:
+ * - 只发送至少需要hdmatx
+ * - 只接收至少需要hdmarx
+ * - 全双工收发需要hdmatx和hdmarx
+ *
+ * 这里不自动退回阻塞模式,因为调用者显式选择DMA时通常是为了验证DMA链路。
+ * 若CubeMX配置缺失,直接返回HAL_ERROR并打印明确日志,避免静默卡在等待完成信号。
+ */
+static HAL_StatusTypeDef SPICheckDmaReady(SPIInstance *spi_ins, uint8_t need_tx, uint8_t need_rx)
+{
+    if (spi_ins == NULL || spi_ins->spi_handle == NULL)
+    {
+        return HAL_ERROR;
+    }
+
+    if (need_tx != 0U && spi_ins->spi_handle->hdmatx == NULL)
+    {
+        LOGERROR("[bsp_spi] SPI DMA发送失败: hdmatx为空,请在CubeMX中配置SPI TX DMA");
+        return HAL_ERROR;
+    }
+
+    if (need_rx != 0U && spi_ins->spi_handle->hdmarx == NULL)
+    {
+        LOGERROR("[bsp_spi] SPI DMA接收失败: hdmarx为空,请在CubeMX中配置SPI RX DMA");
         return HAL_ERROR;
     }
 
@@ -236,8 +263,8 @@ static void SPIInvalidateDCacheByAddr(const void *buffer, uint16_t len)
 /**
  * @brief 确保总线的RTOS对象已经创建
  *
- * 本函数只允许在FreeRTOS调度器运行后调用。mutex使用优先级继承,
- * 降低低优先级任务占用SPI时对高优先级任务造成的优先级反转影响。
+ * 当前主要由SPIBusOsInit()在osKernelInitialize()之后、任务启动前统一创建。
+ * 若后续确实在任务运行期动态注册SPI总线,本函数也会在第一次访问时兜底创建。
  */
 static HAL_StatusTypeDef SPIEnsureBusOsObjects(SPIBusResource *bus)
 {
@@ -245,33 +272,88 @@ static HAL_StatusTypeDef SPIEnsureBusOsObjects(SPIBusResource *bus)
         .name = "bsp_spi_mutex",
         .attr_bits = osMutexPrioInherit,
     };
+    osKernelState_t kernel_state;
+    int32_t kernel_lock = -1;
+    HAL_StatusTypeDef status = HAL_OK;
 
     if (bus == NULL)
     {
         return HAL_ERROR;
     }
 
-    if (osKernelGetState() != osKernelRunning)
+    if (bus->os_objects_ready != 0U)
     {
+        return HAL_OK;
+    }
+
+    kernel_state = osKernelGetState();
+    if (kernel_state == osKernelInactive || kernel_state == osKernelError)
+    {
+        LOGERROR("[bsp_spi] SPI总线资源创建失败: RTOS内核尚未初始化");
         return HAL_ERROR;
     }
 
-    if (bus->mutex == NULL)
+    /*
+     * 正常路径是在调度器启动前统一创建,没有并发。若运行期动态注册总线,
+     * 这里短暂锁住内核调度,避免两个任务同时为同一总线创建RTOS对象。
+     */
+    if (kernel_state == osKernelRunning)
     {
-        bus->mutex = osMutexNew(&mutex_attr);
-        if (bus->mutex == NULL)
+        kernel_lock = osKernelLock();
+        if (kernel_lock < 0)
         {
-            LOGERROR("[bsp_spi] SPI总线资源创建失败: 互斥锁为空");
+            LOGERROR("[bsp_spi] SPI总线资源创建失败: 内核锁定失败");
             return HAL_ERROR;
+        }
+
+        if (bus->os_objects_ready != 0U)
+        {
+            (void)osKernelRestoreLock(kernel_lock);
+            return HAL_OK;
         }
     }
 
-    if (bus->complete_sem == NULL)
+    do
     {
-        bus->complete_sem = osSemaphoreNew(1, 0, NULL);
         if (bus->complete_sem == NULL)
         {
-            LOGERROR("[bsp_spi] SPI总线资源创建失败: 完成信号量为空");
+            bus->complete_sem = osSemaphoreNew(1, 0, NULL);
+            if (bus->complete_sem == NULL)
+            {
+                LOGERROR("[bsp_spi] SPI总线资源创建失败: 完成信号量为空");
+                status = HAL_ERROR;
+                break;
+            }
+        }
+
+        if (bus->mutex == NULL)
+        {
+            bus->mutex = osMutexNew(&mutex_attr);
+            if (bus->mutex == NULL)
+            {
+                LOGERROR("[bsp_spi] SPI总线资源创建失败: 互斥锁为空");
+                status = HAL_ERROR;
+                break;
+            }
+        }
+
+        bus->os_objects_ready = 1U;
+    } while (0);
+
+    if (kernel_lock >= 0)
+    {
+        (void)osKernelRestoreLock(kernel_lock);
+    }
+
+    return status;
+}
+
+HAL_StatusTypeDef SPIBusOsInit(void)
+{
+    for (uint8_t i = 0; i < bus_idx; i++)
+    {
+        if (SPIEnsureBusOsObjects(&spi_bus[i]) != HAL_OK)
+        {
             return HAL_ERROR;
         }
     }
@@ -312,7 +394,6 @@ static HAL_StatusTypeDef SPILockBus(SPIInstance *spi_ins, SPIBusResource **bus_o
 
     if (SPIIsInISR())
     {
-        LOGERROR("[bsp_spi] SPI总线加锁失败: 不允许在中断上下文调用同步SPI接口");
         return HAL_ERROR;
     }
 
@@ -489,12 +570,7 @@ SPIInstance *SPIRegister(SPI_Init_Config_s *conf)
 
     (void)SPIGetOrCreateBus(conf->spi_handle);
 
-    instance = (SPIInstance *)malloc(sizeof(SPIInstance));
-    if (instance == NULL)
-    {
-        SPIRegisterErrorHandler("实例内存申请失败");
-    }
-
+    instance = &spi_instance_pool[idx];
     memset(instance, 0, sizeof(SPIInstance));
 
     instance->spi_handle = conf->spi_handle;
@@ -557,6 +633,11 @@ HAL_StatusTypeDef SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t 
             break;
         }
         status = SPICheckDmaLength(len);
+        if (status != HAL_OK)
+        {
+            break;
+        }
+        status = SPICheckDmaReady(spi_ins, 1U, 0U);
         if (status != HAL_OK)
         {
             break;
@@ -638,6 +719,11 @@ HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
             break;
         }
         status = SPICheckDmaLength(len);
+        if (status != HAL_OK)
+        {
+            break;
+        }
+        status = SPICheckDmaReady(spi_ins, 0U, 1U);
         if (status != HAL_OK)
         {
             break;
@@ -733,6 +819,11 @@ HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8
             break;
         }
         status = SPICheckDmaLength(len);
+        if (status != HAL_OK)
+        {
+            break;
+        }
+        status = SPICheckDmaReady(spi_ins, 1U, 1U);
         if (status != HAL_OK)
         {
             break;

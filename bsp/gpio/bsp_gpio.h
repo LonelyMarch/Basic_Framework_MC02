@@ -1,3 +1,8 @@
+/**
+ * @file bsp_gpio.h
+ * @brief GPIO输入输出和EXTI回调分发的BSP封装。
+ */
+
 #include "gpio.h"
 #include "stdint.h"
 
@@ -22,11 +27,11 @@ typedef enum
 typedef struct tmpgpio
 {
     GPIO_TypeDef *GPIOx;        // GPIOA,GPIOB,GPIOC...
-    GPIO_PinState pin_state;    // 引脚状态,Set,Reset;not frequently used
-    GPIO_EXTI_MODE_e exti_mode; // 外部中断模式 not frequently used
-    uint16_t GPIO_Pin;          // 引脚号,
+    GPIO_PinState pin_state;    // 注册时记录的默认/期望引脚状态,实际电平请用GPIORead()读取
+    GPIO_EXTI_MODE_e exti_mode; // 外部中断触发模式,需要和CubeMX配置保持一致
+    uint16_t GPIO_Pin;          // 引脚号
     // GPIO_Pin使用HAL GPIO_PIN_x宏,例如GPIO_PIN_0、GPIO_PIN_1
-    // EXTI中断回调函数,该函数会在HAL_GPIO_EXTI_Callback的ISR上下文中被调用
+    // EXTI中断回调函数,该函数由BSP服务任务在任务上下文中调用
     void (*gpio_model_callback)(struct tmpgpio *);
     void *id;                                      // 区分不同的GPIO实例
 
@@ -39,12 +44,12 @@ typedef struct tmpgpio
 typedef struct
 {
     GPIO_TypeDef *GPIOx;        // GPIOA,GPIOB,GPIOC...
-    GPIO_PinState pin_state;    // 引脚状态,Set,Reset not frequently used
-    GPIO_EXTI_MODE_e exti_mode; // 外部中断模式 not frequently used
+    GPIO_PinState pin_state;    // 注册时记录的默认/期望引脚状态
+    GPIO_EXTI_MODE_e exti_mode; // 外部中断触发模式,需要和CubeMX配置保持一致
     uint16_t GPIO_Pin;          // 引脚号,@note 这里的引脚号是GPIO_PIN_0,GPIO_PIN_1...
     // GPIO_Pin使用HAL GPIO_PIN_x宏,例如GPIO_PIN_0、GPIO_PIN_1
 
-    // EXTI中断回调函数,该函数会在HAL_GPIO_EXTI_Callback的ISR上下文中被调用
+    // EXTI中断回调函数,该函数由BSP服务任务在任务上下文中调用
     void (*gpio_model_callback)(GPIOInstance *);
     void *id;                                    // 区分不同的GPIO实例
 

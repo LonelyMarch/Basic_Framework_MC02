@@ -130,15 +130,15 @@ void VisionSend()
 #ifdef VISION_USE_VCP
 
 #include "bsp_usb.h"
-static uint8_t *vis_recv_buff;
 
-static void DecodeVision(uint16_t recv_len)
+static void DecodeVision(const uint8_t *buf, uint16_t recv_len)
 {
     uint16_t flag_register;
-    if (recv_len < VISION_RECV_SIZE)
+    if (buf == NULL || recv_len < VISION_RECV_SIZE)
         return;
 
-    get_protocol_info_with_len(vis_recv_buff, recv_len, &flag_register, (uint8_t *)&recv_data.pitch);
+    DaemonReload(vision_daemon_instance); // 喂狗
+    get_protocol_info_with_len((uint8_t *)buf, recv_len, &flag_register, (uint8_t *)&recv_data.pitch);
     // TODO: code to resolve flag_register;
 }
 
@@ -146,8 +146,12 @@ static void DecodeVision(uint16_t recv_len)
 Vision_Recv_s *VisionInit(UART_HandleTypeDef *_handle)
 {
     UNUSED(_handle); // 仅为了消除警告
-    USB_Init_Config_s conf = {.rx_cbk = DecodeVision};
-    vis_recv_buff = USBInit(conf);
+    USB_Init_Config_s conf = {.rx_callback = DecodeVision};
+    if (USBInit(&conf) != USBD_OK)
+    {
+        LOGERROR("[vision] USB CDC register failed");
+        return NULL;
+    }
 
     // 为master process注册daemon,用于判断视觉通信是否离线
     Daemon_Init_Config_s daemon_conf = {
@@ -165,11 +169,16 @@ void VisionSend()
     static uint16_t flag_register;
     static uint8_t send_buff[VISION_SEND_SIZE];
     static uint16_t tx_len;
+    USBD_StatusTypeDef status;
     // TODO: code to set flag_register
     flag_register = 30 << 8 | 0b00000001;
     // 将数据转化为seasky协议的数据包
     get_protocol_send_data(0x02, flag_register, &send_data.yaw, 3, send_buff, &tx_len);
-    USBTransmit(send_buff, tx_len);
+    status = USBTransmit(send_buff, tx_len);
+    if (status != USBD_OK && status != USBD_BUSY)
+    {
+        LOGWARNING("[vision] USB CDC send failed, status [%d]", status);
+    }
 }
 
 #endif // VISION_USE_VCP

@@ -313,7 +313,7 @@ uint8_t bmi088_accel_init(void)
         LOGERROR("[bmi088] Can not reset bmi088 acc, status=%u", (unsigned int)status);
         return BMI088_NO_SENSOR;
     }
-    // HAL_Delay(BMI088_LONG_DELAY_TIME);
+    // 使用DWT短延时,避免初始化阶段依赖HAL tick或RTOS调度。
     DWT_Delay(0.08);
     // check commiunication is normal after reset
     status = BMI088_accel_read_single_reg(BMI088_ACC_CHIP_ID, res);
@@ -404,7 +404,7 @@ uint8_t bmi088_gyro_init(void)
         LOGERROR("[bmi088] Can not reset bmi088 gyro, status=%u", (unsigned int)status);
         return BMI088_NO_SENSOR;
     }
-    // HAL_Delay(BMI088_LONG_DELAY_TIME);
+    // 使用DWT短延时,避免初始化阶段依赖HAL tick或RTOS调度。
     DWT_Delay(0.08);
     // check commiunication is normal after reset
     status = BMI088_gyro_read_single_reg(BMI088_GYRO_CHIP_ID, res);

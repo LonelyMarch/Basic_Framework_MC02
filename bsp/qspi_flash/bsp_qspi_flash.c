@@ -1,7 +1,9 @@
 #include "bsp_qspi_flash.h"
 
 #include "bsp_log.h"
-#include "cmsis_os2.h"
+#include "FreeRTOS.h"
+#include "semphr.h"
+#include "task.h"
 #include "octospi.h"
 #include <string.h>
 
@@ -15,7 +17,8 @@ extern OSPI_HandleTypeDef hospi2;
 #define BSP_QSPI_FLASH_CHIP_ERASE_TIMEOUT_MS    100000U
 #define BSP_QSPI_FLASH_MUTEX_TIMEOUT_MS         1000U
 
-static osMutexId_t qspi_flash_mutex = NULL;
+static StaticSemaphore_t qspi_flash_mutex_cb;
+static SemaphoreHandle_t qspi_flash_mutex = NULL;
 static uint8_t qspi_flash_memory_mapped = 0;
 
 static int8_t BSP_QSPI_Flash_Lock(uint32_t timeout);
@@ -37,6 +40,16 @@ static int8_t BSP_QSPI_Flash_ExitMemoryMappedIfNeeded(void);
 int8_t BSP_QSPI_Flash_Init(void)
 {
     uint32_t device_id;
+
+    if (qspi_flash_mutex == NULL)
+    {
+        qspi_flash_mutex = xSemaphoreCreateRecursiveMutexStatic(&qspi_flash_mutex_cb);
+        if (qspi_flash_mutex == NULL)
+        {
+            LOGERROR("[qspi_flash] mutex create failed");
+            return BSP_QSPI_FLASH_ERROR_MUTEX;
+        }
+    }
 
     device_id = BSP_QSPI_Flash_ReadID();
 
@@ -386,7 +399,7 @@ int8_t BSP_QSPI_Flash_ChipErase(void)
     int8_t lock_state;
     int8_t status;
 
-    lock_state = BSP_QSPI_Flash_Lock(osWaitForever);
+    lock_state = BSP_QSPI_Flash_Lock(UINT32_MAX);
     if (lock_state < 0)
     {
         return lock_state;
@@ -502,52 +515,26 @@ int8_t BSP_QSPI_Flash_AbortMemoryMappedMode(void)
  */
 static int8_t BSP_QSPI_Flash_Lock(uint32_t timeout)
 {
-    osKernelState_t kernel_state;
-    const osMutexAttr_t mutex_attr = {
-        .name = "qspi_flash",
-        .attr_bits = osMutexRecursive | osMutexPrioInherit,
-    };
+    TickType_t timeout_ticks;
 
     if (__get_IPSR() != 0U)
     {
-        LOGERROR("[qspi_flash] cannot access flash in ISR");
         return BSP_QSPI_FLASH_ERROR_IN_ISR;
     }
 
-    kernel_state = osKernelGetState();
-    if (kernel_state != osKernelRunning)
+    if (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING)
     {
         return 0;
     }
 
     if (qspi_flash_mutex == NULL)
     {
-        int32_t kernel_lock = osKernelLock();
-        if (kernel_lock < 0)
-        {
-            LOGERROR("[qspi_flash] kernel lock failed");
-            return BSP_QSPI_FLASH_ERROR_MUTEX;
-        }
-
-        if (qspi_flash_mutex == NULL)
-        {
-            qspi_flash_mutex = osMutexNew(&mutex_attr);
-        }
-
-        if (osKernelRestoreLock(kernel_lock) < 0)
-        {
-            LOGERROR("[qspi_flash] kernel restore lock failed");
-            return BSP_QSPI_FLASH_ERROR_MUTEX;
-        }
-
-        if (qspi_flash_mutex == NULL)
-        {
-            LOGERROR("[qspi_flash] mutex create failed");
-            return BSP_QSPI_FLASH_ERROR_MUTEX;
-        }
+        LOGERROR("[qspi_flash] mutex not initialized");
+        return BSP_QSPI_FLASH_ERROR_MUTEX;
     }
 
-    if (osMutexAcquire(qspi_flash_mutex, timeout) != osOK)
+    timeout_ticks = (timeout == UINT32_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(timeout);
+    if (xSemaphoreTakeRecursive(qspi_flash_mutex, timeout_ticks) != pdPASS)
     {
         LOGERROR("[qspi_flash] mutex acquire timeout");
         return BSP_QSPI_FLASH_ERROR_MUTEX;
@@ -560,7 +547,7 @@ static void BSP_QSPI_Flash_Unlock(int8_t lock_state)
 {
     if ((lock_state > 0) && (qspi_flash_mutex != NULL))
     {
-        if (osMutexRelease(qspi_flash_mutex) != osOK)
+        if (xSemaphoreGiveRecursive(qspi_flash_mutex) != pdPASS)
         {
             LOGERROR("[qspi_flash] mutex release failed");
         }

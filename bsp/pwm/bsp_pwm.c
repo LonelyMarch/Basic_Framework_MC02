@@ -1,17 +1,25 @@
 #include "bsp_pwm.h"
 #include "bsp_log.h"
-#include "stdlib.h"
 #include "memory.h"
 
-// 配合中断以及初始化
+// 注册表会被PWM DMA完成回调读取,发布实例时需要避免回调看到半初始化对象。
 static uint8_t idx;
-static PWMInstance *pwm_instance[PWM_DEVICE_CNT] = {NULL}; // 所有的pwm instance保存于此,用于callback时判断中断来源
+static PWMInstance pwm_instance_pool[PWM_DEVICE_CNT]; // PWM实例静态池,控制结构体放默认.bss/DTCM
+static PWMInstance *pwm_instance[PWM_DEVICE_CNT] = {NULL}; // 已发布的PWM实例指针表,用于回调查找中断来源
 static uint8_t PWMIsAPB1Timer(TIM_TypeDef *tim);
 static uint8_t PWMIsAPB2Timer(TIM_TypeDef *tim);
 static uint8_t PWMIs32BitTimer(TIM_TypeDef *tim);
 static uint32_t PWMGetTimerClock(uint32_t pclk, uint32_t apb_prescaler);
 static uint32_t PWMSelectTclk(TIM_HandleTypeDef *htim);
-static uint8_t PWMAddInstance(PWMInstance *pwm);
+static PWMInstance *PWMReserveInstance(uint8_t *slot);
+static void PWMPublishInstance(uint8_t slot, PWMInstance *pwm);
+
+__attribute__((noreturn)) static void PWMFatalError(void)
+{
+    Error_Handler();
+    __builtin_unreachable();
+}
+
 /**
  * @brief pwm dma传输完成回调函数
  *
@@ -20,8 +28,11 @@ static uint8_t PWMAddInstance(PWMInstance *pwm);
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
     for (uint8_t i = 0; i < idx; i++)
-    { // 来自同一个定时器的中断且通道相同
-        if (pwm_instance[i]->htim == htim && htim->Channel == (1<<(pwm_instance[i]->channel/4)))
+    {
+        // 来自同一个定时器且通道相同,才认为该DMA完成事件属于当前PWM实例。
+        if (pwm_instance[i] != NULL &&
+            pwm_instance[i]->htim == htim &&
+            htim->Channel == (1 << (pwm_instance[i]->channel / 4)))
         {
             if (pwm_instance[i]->callback) // 如果有回调函数
                 pwm_instance[i]->callback(pwm_instance[i]);
@@ -35,25 +46,18 @@ PWMInstance *PWMRegister(PWM_Init_Config_s *config)
     if (config == NULL || config->htim == NULL)
     {
         LOGERROR("[bsp_pwm] PWMRegister received null config");
-        Error_Handler();
+        PWMFatalError();
         return NULL;
     }
 
-    if (idx >= PWM_DEVICE_CNT) // 超过最大实例数,考虑增加或查看是否有内存泄漏
-    {
-        LOGERROR("[bsp_pwm] pwm instance count exceeds limit");
-        Error_Handler();
-        return NULL;
-    }
-
-    PWMInstance *pwm = (PWMInstance *)malloc(sizeof(PWMInstance));
+    uint8_t slot;
+    PWMInstance *pwm = PWMReserveInstance(&slot);
     if (pwm == NULL)
     {
-        LOGERROR("[bsp_pwm] pwm instance malloc failed");
-        Error_Handler();
+        LOGERROR("[bsp_pwm] pwm instance count exceeds limit");
+        PWMFatalError();
         return NULL;
     }
-
     memset(pwm, 0, sizeof(PWMInstance));
 
     pwm->htim = config->htim;
@@ -66,8 +70,7 @@ PWMInstance *PWMRegister(PWM_Init_Config_s *config)
     if (pwm->tclk == 0U)
     {
         LOGERROR("[bsp_pwm] unsupported timer instance");
-        free(pwm);
-        Error_Handler();
+        PWMFatalError();
         return NULL;
     }
 
@@ -75,27 +78,19 @@ PWMInstance *PWMRegister(PWM_Init_Config_s *config)
     if (HAL_TIM_PWM_Start(pwm->htim, pwm->channel) != HAL_OK)
     {
         LOGERROR("[bsp_pwm] pwm start failed");
-        free(pwm);
-        Error_Handler();
+        PWMFatalError();
         return NULL;
     }
 
     PWMSetPeriod(pwm, pwm->period);
     PWMSetDutyRatio(pwm, pwm->dutyratio);
 
-    if (PWMAddInstance(pwm) == 0U)
-    {
-        LOGERROR("[bsp_pwm] pwm instance count exceeds limit");
-        (void)HAL_TIM_PWM_Stop(pwm->htim, pwm->channel);
-        free(pwm);
-        Error_Handler();
-        return NULL;
-    }
+    PWMPublishInstance(slot, pwm);
 
     return pwm;
 }
 
-/* 只是对HAL的函数进行了形式上的封装 */
+/* 启动已注册PWM通道。保留该接口便于模块在运行期重新打开输出。 */
 void PWMStart(PWMInstance *pwm)
 {
     if (pwm == NULL || pwm->htim == NULL)
@@ -107,11 +102,11 @@ void PWMStart(PWMInstance *pwm)
     if (HAL_TIM_PWM_Start(pwm->htim, pwm->channel) != HAL_OK)
     {
         LOGERROR("[bsp_pwm] pwm start failed");
-        Error_Handler();
+        return;
     }
 }
 
-/* 只是对HAL的函数进行了形式上的封装 */
+/* 停止已注册PWM通道。停止后实例参数仍保留,后续可再次PWMStart()。 */
 void PWMStop(PWMInstance *pwm)
 {
     if (pwm == NULL || pwm->htim == NULL)
@@ -123,7 +118,7 @@ void PWMStop(PWMInstance *pwm)
     if (HAL_TIM_PWM_Stop(pwm->htim, pwm->channel) != HAL_OK)
     {
         LOGERROR("[bsp_pwm] pwm stop failed");
-        Error_Handler();
+        return;
     }
 }
 
@@ -220,7 +215,7 @@ void PWMSetDutyRatio(PWMInstance *pwm, float dutyratio)
     __HAL_TIM_SetCompare(pwm->htim, pwm->channel, compare);
 }
 
-/* 只是对HAL的函数进行了形式上的封装 */
+/* 启动PWM DMA输出,常用于需要连续更新CCR的波形输出场景。 */
 void PWMStartDMA(PWMInstance *pwm, uint32_t *pData, uint32_t Size)
 {
     if (pwm == NULL || pwm->htim == NULL)
@@ -238,7 +233,7 @@ void PWMStartDMA(PWMInstance *pwm, uint32_t *pData, uint32_t Size)
     if (HAL_TIM_PWM_Start_DMA(pwm->htim, pwm->channel, pData, Size) != HAL_OK)
     {
         LOGERROR("[bsp_pwm] pwm dma start failed");
-        Error_Handler();
+        return;
     }
 }
 
@@ -371,21 +366,34 @@ static uint32_t PWMSelectTclk(TIM_HandleTypeDef *htim)
     return 0;
 }
 
-// 将PWM实例加入全局注册表,只在极短临界区内保护idx和实例数组
-static uint8_t PWMAddInstance(PWMInstance *pwm)
+// 从静态池中预留一个实例槽位。先增加idx但暂不发布指针,中断回调会跳过NULL槽位。
+static PWMInstance *PWMReserveInstance(uint8_t *slot)
+{
+    uint32_t primask = __get_PRIMASK();
+    PWMInstance *pwm = NULL;
+
+    __disable_irq();
+    if (idx < PWM_DEVICE_CNT)
+    {
+        *slot = idx;
+        pwm = &pwm_instance_pool[idx];
+        pwm_instance[idx] = NULL;
+        idx++;
+    }
+    __set_PRIMASK(primask);
+
+    return pwm;
+}
+
+// 初始化完成后再发布实例指针,避免回调读到半初始化对象。
+static void PWMPublishInstance(uint8_t slot, PWMInstance *pwm)
 {
     uint32_t primask = __get_PRIMASK();
 
     __disable_irq();
-    if (idx >= PWM_DEVICE_CNT)
+    if (slot < PWM_DEVICE_CNT)
     {
-        __set_PRIMASK(primask);
-        return 0U;
+        pwm_instance[slot] = pwm;
     }
-
-    pwm_instance[idx] = pwm;
-    idx++;
     __set_PRIMASK(primask);
-
-    return 1U;
 }

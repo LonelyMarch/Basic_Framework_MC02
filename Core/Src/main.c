@@ -132,7 +132,7 @@ int main(void)
   MX_I2C2_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  RobotInit(); // 唯一的初始化入口
+  RobotInit(); // 机器人硬件和模块初始化入口,RTOS任务在MX_FREERTOS_Init()中创建
   LOGINFO("[main] SystemInit() and RobotInit() done");
   /* USER CODE END 2 */
 
