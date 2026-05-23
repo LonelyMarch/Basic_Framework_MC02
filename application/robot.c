@@ -20,7 +20,7 @@
 #endif
 
 
-void RobotInit()
+void RobotInit(void)
 {  
     // 关闭中断,防止在初始化过程中发生中断
     // 请不要在初始化过程中使用中断和延时函数！
@@ -39,13 +39,16 @@ void RobotInit()
     ChassisInit();
 #endif
 
-    OSTaskInit(); // 创建基础任务
-
     // 初始化完成,开启中断
     __enable_irq();
 }
 
-void RobotTask()
+void RobotOSTaskInit(void)
+{
+    OSTaskInit(); // 此函数必须在osKernelInitialize()之后、osKernelStart()之前调用
+}
+
+void RobotTask(void)
 {
 #if defined(ONE_BOARD) || defined(GIMBAL_BOARD)
     RobotCMDTask();

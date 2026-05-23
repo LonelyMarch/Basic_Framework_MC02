@@ -74,6 +74,10 @@ typedef struct
         uint8_t imu_ready : 1; // 1:IMU数据准备好,0:IMU数据未准备好(gyro+acc)
         // 后续可添加其他标志位,不够用可以扩充16or32,太多可以删
     } update_flag;
+    volatile uint32_t acc_drdy_count;  // 加速度计数据准备中断计数,用于避免任务读取期间丢失新的触发事件
+    volatile uint32_t gyro_drdy_count; // 陀螺仪数据准备中断计数,用于避免任务读取期间丢失新的触发事件
+    uint32_t acc_read_count;           // 任务侧已经处理到的加速度计中断计数
+    uint32_t gyro_read_count;          // 任务侧已经处理到的陀螺仪中断计数
 } BMI088Instance;
 
 /* BMI088初始化配置 */

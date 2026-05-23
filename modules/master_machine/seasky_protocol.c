@@ -115,13 +115,31 @@ uint16_t get_protocol_info(uint8_t *rx_buf,          // 接收到的原始数据
                            uint16_t *flags_register, // 接收数据的16位寄存器地址
                            uint8_t *rx_data)         // 接收的float数据存储地址
 {
+    return get_protocol_info_with_len(rx_buf, UINT16_MAX, flags_register, rx_data);
+}
+
+/*
+    此函数用于处理接收数据,并根据本次实际接收长度做边界保护。
+    返回数据内容的id
+*/
+uint16_t get_protocol_info_with_len(uint8_t *rx_buf,          // 接收到的原始数据
+                                    uint16_t rx_len,          // 本次实际接收到的数据长度
+                                    uint16_t *flags_register, // 接收数据的16位寄存器地址
+                                    uint8_t *rx_data)         // 接收的float数据存储地址
+{
     // 放在静态区,避免反复申请栈上空间
     static protocol_rm_struct pro;
-    static uint16_t date_length;
+    static uint32_t date_length;
+
+    if (rx_buf == NULL || flags_register == NULL || rx_data == NULL || rx_len < OFFSET_BYTE)
+        return 0;
 
     if (protocol_heade_Check(&pro, rx_buf))
     {
         date_length = OFFSET_BYTE + pro.header.data_length;
+        if (pro.header.data_length < 2U || date_length > rx_len)
+            return 0;
+
         if (CRC16_Check_Sum(&rx_buf[0], date_length))
         {
             *flags_register = (rx_buf[7] << 8) | rx_buf[6];

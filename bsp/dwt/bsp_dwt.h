@@ -5,7 +5,7 @@
  * @author  modified by NeoZng
  * @version V1.2.0
  * @date    2022/3/8
- * @brief
+ * @brief DWT高精度时间基准和短延时接口
  ******************************************************************************
  * @attention
  *
@@ -28,7 +28,7 @@ typedef struct
 /**
  * @brief 该宏用于计算代码段执行时间,单位为秒/s,返回值为float类型
  *        首先需要创建一个float类型的变量,用于存储时间间隔
- *        计算得到的时间间隔同时还会通过RTT打印到日志终端,你也可以将你的dt变量添加到查看
+ *        计算得到的时间间隔会通过BSP日志输出,便于临时测量关键代码耗时。
  */
 #define TIME_ELAPSE(dt, code)                    \
     do                                           \
@@ -36,13 +36,13 @@ typedef struct
         float tstart = DWT_GetTimeline_s();      \
         code;                                    \
         dt = DWT_GetTimeline_s() - tstart;       \
-        LOGINFO("[DWT] " #dt " = %f s\r\n", dt); \
+        LOGINFO("[DWT] " #dt " = %d us\r\n", (int)(dt * 1000000.0f)); \
     } while (0)
 
 /**
- * @brief 初始化DWT,传入参数为CPU频率,单位MHz
+ * @brief 初始化DWT,传入参数为CPU内核频率,单位MHz
  *
- * @param CPU_Freq_mHz c板为168MHz,A板为180MHz
+ * @param CPU_Freq_mHz CPU内核频率,DWT CYCCNT按CPU cycle计数
  */
 void DWT_Init(uint32_t CPU_Freq_mHz);
 
@@ -93,8 +93,8 @@ uint64_t DWT_GetTimeline_us(void);
 void DWT_Delay(float Delay);
 
 /**
- * @brief DWT更新时间轴函数,会被三个timeline函数调用
- * @attention 如果长时间不调用timeline函数,则需要手动调用该函数更新时间轴,否则CYCCNT溢出后定时和时间轴不准确
+ * @brief DWT时间轴维护函数,用于刷新CYCCNT溢出计数
+ * @attention 如果长时间不调用DWT相关接口,则需要周期性调用该函数,否则CYCCNT溢出后长时间轴不准确
  */
 void DWT_SysTimeUpdate(void);
 

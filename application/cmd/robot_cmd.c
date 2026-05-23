@@ -65,7 +65,7 @@ void RobotCMDInit()
 #ifdef GIMBAL_BOARD
     CANComm_Init_Config_s comm_conf = {
         .can_config = {
-            .can_handle = &hcan1,
+            .can_handle = &hfdcan1,
             .tx_id = 0x312,
             .rx_id = 0x311,
         },
@@ -131,7 +131,7 @@ static void RemoteControlSet()
         // ...
     }
     // 左侧开关状态为[下],或视觉未识别到目标,纯遥控器拨杆控制
-    if (switch_is_down(rc_data[TEMP].rc.switch_left) || vision_recv_data->target_state == NO_TARGET)
+    if (switch_is_down(rc_data[TEMP].rc.switch_left) || vision_recv_data == NULL || vision_recv_data->target_state == NO_TARGET)
     { // 按照摇杆的输出大小进行角度增量,增益系数需调整
         gimbal_cmd_send.yaw += 0.005f * (float)rc_data[TEMP].rc.rocker_l_;
         gimbal_cmd_send.pitch += 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
@@ -278,6 +278,9 @@ static void EmergencyHandler()
 /* 机器人核心控制任务,200Hz频率运行(必须高于视觉发送频率) */
 void RobotCMDTask()
 {
+    if (rc_data == NULL)
+        return;
+
    // BMI088Acquire(bmi088_test,&bmi088_data) ;
     // 从其他应用获取回传数据
 #ifdef ONE_BOARD
@@ -312,5 +315,5 @@ void RobotCMDTask()
 #endif // GIMBAL_BOARD
     PubPushMessage(shoot_cmd_pub, (void *)&shoot_cmd_send);
     PubPushMessage(gimbal_cmd_pub, (void *)&gimbal_cmd_send);
-    VisionSend(&vision_send_data);
+    VisionSend();
 }

@@ -1,5 +1,6 @@
 #include "HC05.h"
 #include "bsp_usart.h"
+#include "bsp_log.h"
 
 #define HC05_BUFFERSIZE  HC05_DATASIZE+2  // HC05发送和接收数据buffer大小，不得大于256
 
@@ -15,6 +16,9 @@ static uint8_t hc05_init_flag = 0;  // HC05初始化标志位
 static void HC05RxCallback()
 {
     uint8_t *rxbuff;
+    if (hc05_usart_instance == NULL || hc05_usart_instance->recv_len != HC05_BUFFERSIZE)
+        return;
+
     rxbuff = hc05_usart_instance->recv_buff;
 
     // 帧头帧尾判断
@@ -35,6 +39,11 @@ HC05 *HC05Init(UART_HandleTypeDef *hc05_usart_handle)
     conf.usart_handle = hc05_usart_handle;
     conf.recv_buff_size = HC05_BUFFERSIZE;
     hc05_usart_instance = USARTRegister(&conf);
+    if (hc05_usart_instance == NULL)
+    {
+        LOGERROR("[hc05] USART register failed");
+        return NULL;
+    }
 
     hc05_init_flag = 1;
     return (HC05*)&hc05_msg;
@@ -43,6 +52,13 @@ HC05 *HC05Init(UART_HandleTypeDef *hc05_usart_handle)
 // HC05串口发送函数，一次最多发送HC05_DATASIZE个数据
 void HC05_SendData(uint8_t *data, uint8_t data_num)
 {
+    HAL_StatusTypeDef status;
+
+    if (hc05_init_flag == 0 || data == NULL || data_num > HC05_DATASIZE)
+    {
+        LOGWARNING("[hc05] send argument invalid");
+        return;
+    }
 
     // 发送数据中加入帧头和帧尾
     hc05_msg.send_data[0] = FRAME_HEAD;
@@ -53,6 +69,10 @@ void HC05_SendData(uint8_t *data, uint8_t data_num)
     hc05_msg.send_data[HC05_BUFFERSIZE - 1] = FRAME_END;
 
     // 发送数据
-    USARTSend(hc05_usart_instance, hc05_msg.send_data, data_num+2, USART_TRANSFER_IT); 
+    status = USARTSend(hc05_usart_instance, hc05_msg.send_data, data_num + 2U, USART_TRANSFER_IT);
+    if (status != HAL_OK && status != HAL_BUSY)
+    {
+        LOGWARNING("[hc05] send failed, status [%d]", status);
+    }
 
 }

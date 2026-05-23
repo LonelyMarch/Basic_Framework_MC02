@@ -35,6 +35,7 @@
 /* USER CODE BEGIN Includes */
 #include "robot.h"
 #include "bsp_log.h"
+#include "bsp_dwt.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,12 +56,12 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#define W25Qxx_NumByteToTest   	32*1024					// 测试数据长度：32K
+#define QSPI_FLASH_NUM_BYTE_TO_TEST    (32U * 1024U)      // 测试数据长度: 32K
 
-int32_t OSPI_Status ; 		 // 状态标志位
+int32_t qspi_flash_status;     // 状态标志位
 
-uint8_t  W25Qxx_WriteBuffer[W25Qxx_NumByteToTest];		// 写数据缓冲区
-uint8_t  W25Qxx_ReadBuffer[W25Qxx_NumByteToTest];		// 读数据缓冲区
+uint8_t qspi_flash_write_buffer[QSPI_FLASH_NUM_BYTE_TO_TEST];  // 写数据缓冲区
+uint8_t qspi_flash_read_buffer[QSPI_FLASH_NUM_BYTE_TO_TEST];   // 读数据缓冲区
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -129,8 +130,9 @@ int main(void)
   MX_UART8_Init();
   MX_UART9_Init();
   MX_I2C2_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  RobotInit(); // 唯一的初始化入口
+  RobotInit(); // 机器人硬件和模块初始化入口,RTOS任务在MX_FREERTOS_Init()中创建
   LOGINFO("[main] SystemInit() and RobotInit() done");
   /* USER CODE END 2 */
 
@@ -268,6 +270,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
+  if (htim->Instance == TIM6)
+  {
+    // TIM6每1s调用一次DWT,保证CYCCNT溢出能被及时记录
+    DWT_SysTimeUpdate();
+  }
 
   /* USER CODE END Callback 1 */
 }

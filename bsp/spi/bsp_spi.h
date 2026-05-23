@@ -1,12 +1,37 @@
+/**
+ * @file bsp_spi.h
+ * @brief SPI总线型外设BSP封装,支持阻塞/中断/DMA同步事务。
+ */
+#ifndef BSP_SPI_H
+#define BSP_SPI_H
+
 #include "spi.h"
 #include "stdint.h"
 #include "gpio.h"
 
-/* 根据开发板引出的spi引脚以及CubeMX中的初始化配置设定 */
-#define SPI_DEVICE_CNT 2       // C型开发板引出两路spi,分别连接BMI088/作为扩展IO在8pin牛角座引出
-#define MX_SPI_BUS_SLAVE_CNT 4 // 单个spi总线上挂载的从机数目
+/* 根据开发板引出的SPI引脚以及CubeMX中的初始化配置设定 */
+#define SPI_BUS_CNT 3          // 当前主控板引出3路SPI硬件总线
+#define MX_SPI_BUS_SLAVE_CNT 4 // 单个SPI总线上最多挂载的从机数目
+#define SPI_MX_INSTANCE_CNT (SPI_BUS_CNT * MX_SPI_BUS_SLAVE_CNT) // BSP层最多注册的SPI从设备实例数量
 
-/* spi transmit recv mode enumerate*/
+#ifndef SPI_HAL_TIMEOUT_MS
+#define SPI_HAL_TIMEOUT_MS 5U // HAL阻塞SPI事务超时时间,单位ms
+#endif
+
+#ifndef SPI_OS_TIMEOUT_TICK
+#define SPI_OS_TIMEOUT_TICK 100U // FreeRTOS等待SPI互斥锁或完成信号的超时时间,单位tick
+#endif
+
+#ifndef SPI_DMA_BOUNCE_BUFFER_SIZE
+#define SPI_DMA_BOUNCE_BUFFER_SIZE 1024U // SPI DMA内部RAM_D2中转缓冲区大小
+#endif
+
+// 是否启用SPI DMA的D-Cache一致性维护。若后续确认DMA缓冲区位于non-cacheable区域,可以改为0。
+#ifndef SPI_USE_DMA_CACHE_MAINTENANCE
+#define SPI_USE_DMA_CACHE_MAINTENANCE 1U
+#endif
+
+/* SPI传输模式枚举。IT/DMA模式内部仍会等待事务完成,对上层表现为同步接口。 */
 typedef enum
 {
     SPI_BLOCK_MODE = 0, // 默认使用阻塞模式
@@ -22,10 +47,9 @@ typedef struct spi_ins_temp
     uint16_t cs_pin;               // 片选信号对应的引脚号,GPIO_PIN_1,GPIO_PIN_2等等
 
     SPI_TXRX_MODE_e spi_work_mode; // 传输工作模式
-    uint8_t rx_size;               // 本次接收的数据长度
+    uint16_t rx_size;              // 本次接收的数据长度,与HAL SPI的Size参数保持一致
     uint8_t *rx_buffer;            // 本次接收的数据缓冲区
-    uint8_t CS_State;              // 片选信号状态,用于中断模式下的片选控制
-    uint8_t * cs_pin_state;        // 片选信号状态,用于中断模式下的片选控制
+    uint8_t CS_State;              // 片选信号状态,用于记录当前片选电平
     void (*callback)(struct spi_ins_temp *); // 接收回调函数
     void *id;                                // 模块指针
 } SPIInstance;
@@ -33,8 +57,7 @@ typedef struct spi_ins_temp
 /* 接收回调函数定义,包含SPI的module按照此格式构建回调函数 */
 typedef void (*spi_rx_callback)(SPIInstance *);
 
-// @todo: 这里可以将GPIO_TypeDef *GPIOx; uint16_t cs_pin合并为bsp_gpio以简化代码实现
-/* SPI初始化配置,其实基本和SPIIstance一模一样,为了代码风格统一因此再次定义 */
+/* SPI初始化配置。模块通过该结构体注册一个SPI从设备实例。 */
 typedef struct
 {
     SPI_HandleTypeDef *spi_handle; // SPI外设handle
@@ -56,43 +79,45 @@ typedef struct
 SPIInstance *SPIRegister(SPI_Init_Config_s *conf);
 
 /**
+ * @brief 为已经注册的SPI硬件总线创建RTOS互斥锁和完成信号量。
+ *
+ * @note 由BSPTaskInit()在osKernelInitialize()之后、任务启动前统一调用。
+ */
+HAL_StatusTypeDef SPIBusOsInit(void);
+
+/**
  * @brief 通过spi向对应从机发送数据
- * @todo  后续加入阻塞模式下的timeout参数
  *
  * @param spi_ins spi实例指针
  * @param ptr_data 要发送的数据
  * @param len 待发送的数据长度
+ * @return HAL_StatusTypeDef HAL_OK表示发送完成,其他值表示失败或超时
  */
-void SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint8_t len);
+HAL_StatusTypeDef SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len);
 
 /**
  * @brief 通过spi从从机获取数据
- * @attention 特别注意:请保证ptr_data在回调函数被调用之前仍然在作用域内,否则析构之后的行为是未定义的!!!
+ *
+ * @note 函数返回HAL_OK时本次接收事务已经完成;若配置了callback,回调也已在调用者任务上下文执行。
  * 
  * @param spi_ins spi实例指针
  * @param ptr_data 接受数据buffer的首地址
  * @param len 待接收的长度
+ * @return HAL_StatusTypeDef HAL_OK表示接收完成,其他值表示失败或超时
  */
-void SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint8_t len);
+HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len);
 
 /**
  * @brief 通过spi利用移位寄存器同时收发数据
- * @todo  后续加入阻塞模式下的timeout参数
- * @attention 特别注意:请保证ptr_data_rx在回调函数被调用之前仍然在作用域内,否则析构之后的行为是未定义的!!!
+ *
+ * @note 函数返回HAL_OK时本次收发事务已经完成;若配置了callback,回调也已在调用者任务上下文执行。
  * 
  * @param spi_ins spi实例指针
  * @param ptr_data_rx 接收数据地址
  * @param ptr_data_tx 发送数据地址
  * @param len 接收&发送的长度
+ * @return HAL_StatusTypeDef HAL_OK表示收发完成,其他值表示失败或超时
  */
-void SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8_t *ptr_data_tx, uint8_t len);
+HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8_t *ptr_data_tx, uint16_t len);
 
-/**
- * @brief 设定spi收发的工作模式
- *
- * @param spi_ins spi实例指针
- * @param spi_mode 工作模式,包括阻塞模式(block),中断模式(IT),DMA模式.详见SPI_TXRX_MODE_e的定义
- * 
- * @todo 是否直接将mode作为transmit/recv的参数,而不是作为spi实例的属性?两者各有优劣
- */
-void SPISetMode(SPIInstance *spi_ins, SPI_TXRX_MODE_e spi_mode);
+#endif // BSP_SPI_H

@@ -1,12 +1,6 @@
 /**
  * @file bsp_pwm.h
- * @author your name (you@domain.com)
- * @brief 
- * @version 0.1
- * @date 2023-02-14
- * 
- * @copyright Copyright (c) 2023
- * 
+ * @brief PWM输出BSP封装,负责实例注册、周期/占空比设置和PWM DMA完成回调分发。
  */
 
 #ifndef BSP_PWM_H
@@ -23,9 +17,9 @@ typedef struct pwm_ins_temp
 {
     TIM_HandleTypeDef *htim;                 // TIM句柄
     uint32_t channel;                        // 通道
-    uint32_t tclk;                           // 时钟频率
-    float period;                         // 周期
-    float dutyratio;                      // 占空比
+    uint32_t tclk;                           // 定时器输入时钟频率,由BSP根据TIM所在APB域计算
+    float period;                            // PWM周期,单位s
+    float dutyratio;                         // 占空比,范围0~1
     void (*callback)(struct pwm_ins_temp *); // DMA传输完成回调函数
     void *id;                                // 实例ID
 } PWMInstance;
@@ -34,9 +28,9 @@ typedef struct
 {
     TIM_HandleTypeDef *htim;                 // TIM句柄
     uint32_t channel;                        // 通道
-    float period;                         // 周期
-    float dutyratio;                      // 占空比
-    void (*callback)(PWMInstance*); // DMA传输完成回调函数
+    float period;                            // PWM周期,单位s
+    float dutyratio;                         // 占空比,范围0~1
+    void (*callback)(PWMInstance*);          // DMA传输完成回调函数
     void *id;                                // 实例ID
 } PWM_Init_Config_s;
 

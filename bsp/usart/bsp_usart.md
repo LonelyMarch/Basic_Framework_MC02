@@ -1,80 +1,64 @@
 # bsp_usart
 
-<p align='right'>neozng1@hnu.edu.cn</p>
+`bsp_usart` 封装 UART/USART 的注册、ReceiveToIdle 接收、任务上下文解析、阻塞/IT/DMA 发送和 DMA 内存域适配。
 
-> TODO: 增加发送队列以解决短时间内调用`USARTSend()`发生丢包的问题,目前仅支持DMA。还需要提供阻塞和IT模式以供选择，参考bspiic和spi进行实现。
-> 可以直接在发送函数的参数列表添加发送模式选择,或增加instance成员变量,并提供设置模式接口,两者各有优劣
-
-## 使用说明
-
-若你需要构建新的基于串口的module，首先需要拥有一个`usart_instance`的指针用于操作串口对象。
-
-需要在串口实例下设定接收的数据包的长度，实例对应的串口硬件（通过`UART_HandleTypeDef`指定，如`&huart1`），解析接收数据对应的回调函数这三个参数。然后，调用`USARTRegister()`并传入配置好的`usart_instance`指针即可。
-
-若要发送数据，调用`USARTSend()`。注意buffsize务必小于你创建的buff的大小，否则造成指针越界后果未知。
-
-串口硬件收到数据时，会将其存入`usart_instance.recv_buff[]`中，当收到完整一包数据，会调用设定的回调函数`module_callback`（即你注册时提供的解析函数）。在此函数中，你可以通过`usart_instance.recv_buff[]`访问串口收到的数据。
-
-## 代码结构
-
-.h文件内包括了外部接口和类型定义,以及模块对应的宏。c文件内为私有函数和外部接口的定义。
-
-## 类型定义
+## 注册
 
 ```c
-#define DEVICE_USART_CNT 3     // C板至多分配3个串口
-#define USART_RXBUFF_LIMIT 128 // if your protocol needs bigger buff, modify here
+USART_Init_Config_s conf = {
+    .usart_handle = &huart9,
+    .recv_buff_size = 128,
+    .module_callback = VisionDecode,
+};
 
-typedef void (*usart_module_callback)();
-
-/* usart_instance struct,each app would have one instance */
-typedef struct
-{
-    uint8_t recv_buff[USART_RXBUFF_LIMIT]; // 预先定义的最大buff大小,如果太小请修改USART_RXBUFF_LIMIT
-    uint8_t recv_buff_size;                // 模块接收一包数据的大小
-    UART_HandleTypeDef *usart_handle;      // 实例对应的usart_handle
-    usart_module_callback module_callback; // 解析收到的数据的回调函数
-} usart_instance;
+USARTInstance *usart = USARTRegister(&conf);
 ```
 
-- `DEVICE_USART_CNT`是开发板上可用的串口数量。
+注册成功后 BSP 会从静态实例池中分配 `USARTInstance`,绑定 RX/TX DMA 缓冲区和接收帧缓存,然后自动启动接收。
 
-- `USART_RXBUFF_LIMIT`是串口单次接收的数据长度上限，暂时设为128，如果需要更大的buffer容量，修改该值。
+## 接收流程
 
-- `usart_module_callback()`是模块提供给串口接收中断回调函数使用的协议解析函数指针。对于每个需要串口的模块，需要定义一个这样的函数用于解包数据。
+若串口配置了 RX DMA,使用 `HAL_UARTEx_ReceiveToIdle_DMA()`;否则使用 `HAL_UARTEx_ReceiveToIdle_IT()`。
 
-- 每定义一个`usart_instance`，就代表一个串口的**实例**（对象）。一个串口实例内有接收buffer，单个数据包的大小，该串口对应的`HAL handle`（代表其使用的串口硬件具体是哪一个）以及用于解包数据的回调函数。
+DMA 接收启动后会关闭 half transfer 中断,避免同一帧在半满和 IDLE/满传输时被重复回调处理。
 
+HAL 触发 `HAL_UARTEx_RxEventCallback()` 后,BSP 执行:
 
-## 外部接口
+1. 根据 `UART_HandleTypeDef *` 找到实例。
+2. 将本帧数据复制进 `BSPFrameQueue` 管理的接收帧缓存。
+3. 立即重新启动 ReceiveToIdle 接收。
+4. 唤醒 `BSPServiceTask`。
+
+`USARTProcess()` 在任务上下文中遍历所有实例,取出待解析帧,更新 `instance->recv_buff` 和 `instance->recv_len`,再调用模块注册的 `module_callback()`。
+
+## 发送流程
 
 ```c
-void USARTRegister(usart_instance *_instance);
-void USARTSend(usart_instance *_instance, uint8_t *send_buf, uint16_t send_size);
+HAL_StatusTypeDef USARTSend(USARTInstance *instance, uint8_t *buf, uint16_t len, USART_TRANSFER_DMA);
 ```
 
-- `USARTRegister`是用于初始化串口对象的接口，module层的模块对象（也应当为一个结构体）内要包含一个`usart_instance`。
+- 阻塞发送直接使用上层 buffer。
+- IT/DMA 发送会先复制到实例内部 TX 缓冲区,避免上层局部变量提前失效。
+- DMA 发送前会 clean D-Cache。
+- 上一次异步发送未完成时返回 `HAL_BUSY`。
 
-  **在调用该函数之前，需要先对其成员变量`*usart_handle`,`module_callback()`以及`recv_buff_size`进行赋值。**
+`USARTIsReady()` 可用于高频发送前判断串口是否空闲。
 
-- `USARTSend()`是通过模块通过其拥有的串口对象发送数据的接口，调用时传入的参数为串口实例指针，发送缓存以及此次要发送的数据长度（8-bit\*n)。
+## DMA缓冲区
 
-## 私有函数和变量
+USART RX/TX DMA 缓冲区位于 `.dma_buffer` / `RAM_D2`,避免 DMA 访问 DTCM。接收帧缓存只由 CPU 访问,由 `BSPFrameQueue` 管理。
 
-在.c文件内设为static的函数和变量
+## 错误处理
 
-```c
-static usart_instance *instance[DEVICE_USART_CNT];
-```
+`HAL_UART_ErrorCallback()` 中只递增实例 `error_count`,释放发送忙标志并尝试重新启动接收,不在中断中输出日志。上层可通过 `USARTGetErrorCount()` 查询错误次数。
 
-这是bsp层管理所有串口实例的入口。
+## CubeMX要求
 
-```c
-static void USARTServiceInit(usart_instance *_instance)
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
-```
+- DMA 接收串口需要配置 RX DMA。
+- ReceiveToIdle 依赖 UART global interrupt 处理 IDLE 事件,对应 UART 全局中断必须开启。
+- DMA/USART 中断优先级数值必须满足 FreeRTOS 可调用 API 的约束。
 
-- `USARTServiceInit()`会被`USARTRegister()`调用，开启接收中断
+## 当前限制
 
-- `HAL_UARTEx_RxEventCallback()`和`HAL_UART_ErrorCallback()`都是对HAL的回调函数的重定义（原本的callback是`__week`修饰的弱定义），前者在发生**IDLE中断**或**单次DMA传输中断**后会被调用（说明收到了完整的一包数据），随后在里面根据中断来源，调用拥有产生了该中断的模块的协议解析函数进行数据解包；后者在串口传输出错的时候会被调用，重新开启接收。
+- `module_callback` 当前没有参数,模块需要通过自己保存的 `USARTInstance *` 读取 `recv_buff/recv_len`。
+- 当前没有 TX 队列,高频连续发送需要上层节流或后续扩展发送队列。

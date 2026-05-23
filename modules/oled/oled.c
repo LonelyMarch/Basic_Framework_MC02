@@ -1,11 +1,35 @@
-#include "oled.h" 
+#include "oled.h"
 #include "oledfont.h"
-#include "main.h"
+#include "bsp_iic.h"
+#include "bsp_log.h"
 #include <stdio.h>
 #include <stdarg.h>
 
-extern I2C_HandleTypeDef hi2c2;
+#define OLED_I2C_7BIT_ADDRESS ((uint8_t)(OLED_I2C_ADDRESS >> 1U))
+
 static uint8_t OLED_GRAM[128][8];
+static IICInstance *oled_iic;
+
+static IICInstance *OLEDGetIICInstance(void)
+{
+    if (oled_iic == NULL)
+    {
+        IIC_Init_Config_s config = {
+            .handle = &hi2c2,
+            .dev_address = OLED_I2C_7BIT_ADDRESS,
+            .work_mode = IIC_BLOCK_MODE,
+            .id = NULL,
+        };
+
+        /*
+         * OLED_I2C_ADDRESS沿用旧驱动中的8位地址0x78。
+         * bsp/iic注册接口要求填写7位地址,因此这里右移一位得到0x3C。
+         */
+        oled_iic = IICRegister(&config);
+    }
+
+    return oled_iic;
+}
 
 /**
   * @brief          写数据或者指令到OLED， 如果使用的是SPI，请重写这个函数
@@ -16,6 +40,14 @@ static uint8_t OLED_GRAM[128][8];
 void oled_write_byte(uint8_t dat, uint8_t cmd)
 {
     static uint8_t cmd_data[2];
+    IICInstance *iic = OLEDGetIICInstance();
+    HAL_StatusTypeDef status;
+
+    if (iic == NULL)
+    {
+        return;
+    }
+
     if(cmd == OLED_CMD)
     {
         cmd_data[0] = 0x00;
@@ -25,7 +57,12 @@ void oled_write_byte(uint8_t dat, uint8_t cmd)
         cmd_data[0] = 0x40;
     }
     cmd_data[1] = dat;
-    HAL_I2C_Master_Transmit(&hi2c2, OLED_I2C_ADDRESS, cmd_data, 2, 10);
+
+    status = IICTransmit(iic, cmd_data, sizeof(cmd_data), IIC_SEQ_RELEASE);
+    if (status != HAL_OK && status != HAL_BUSY)
+    {
+        LOGWARNING("[oled] IIC transmit failed, status [%d]", status);
+    }
 }
 
 

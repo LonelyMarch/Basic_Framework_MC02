@@ -75,7 +75,7 @@ CMake 已沿用原 Makefile 中的关键配置：
 
 - MCU：`-mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard`
 - 宏定义：`USE_HAL_DRIVER`、`STM32H723xx`、`ARM_MATH_CM7`、`DISABLE_LOG_SYSTEM`
-- 链接脚本：`STM32H723VGTx_FLASH.ld`
+- 链接脚本：`STM32H723XG_FLASH.ld`
 - DSP 库：`Drivers/CMSIS/DSP/Lib/GCC/libarm_cortexM7lfdp_math.a`
 - Debug 优化：`-Og -g -gdwarf-2`
 - 输出：`elf`、`hex`、`bin`、`map`
@@ -86,4 +86,3 @@ CMake 已沿用原 Makefile 中的关键配置：
 - `CMakeLists.txt` 中的源文件列表来自原 Makefile。后续新增 `.c` 文件时，需要同步加入 CMake 源文件列表。
 - 若 CubeMX 重新生成工程并改动外设文件，也需要同步检查 `CMakeLists.txt`。
 - 烧录和调试暂未写入 CMake 目标；可以继续使用 Ozone/J-Link/OpenOCD，调试文件选择 CMake 生成的 `.elf`。
-

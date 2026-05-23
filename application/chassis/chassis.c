@@ -59,7 +59,7 @@ void ChassisInit()
 {
     // 四个轮子的参数一样,改tx_id和反转标志位即可
     Motor_Init_Config_s chassis_motor_config = {
-        .can_init_config.can_handle = &hcan1,
+        .can_init_config.can_handle = &hfdcan1,
         .controller_param_init_config = {
             .speed_PID = {
                 .Kp = 10, // 4.5
@@ -107,7 +107,7 @@ void ChassisInit()
 
     SuperCap_Init_Config_s cap_conf = {
         .can_config = {
-            .can_handle = &hcan2,
+            .can_handle = &hfdcan2,
             .tx_id = 0x302, // 超级电容默认接收id
             .rx_id = 0x301, // 超级电容默认发送id,注意tx和rx在其他人看来是反的
         }};
@@ -119,7 +119,7 @@ void ChassisInit()
 
     CANComm_Init_Config_s comm_conf = {
         .can_config = {
-            .can_handle = &hcan2,
+            .can_handle = &hfdcan2,
             .tx_id = 0x311,
             .rx_id = 0x312,
         },

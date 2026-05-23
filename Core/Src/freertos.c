@@ -26,6 +26,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "robot.h"
 
 /* USER CODE END Includes */
 
@@ -114,6 +115,7 @@ void MX_FREERTOS_Init(void) {
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  RobotOSTaskInit();
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 

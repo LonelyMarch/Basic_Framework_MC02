@@ -15,6 +15,7 @@
 #include "HT04.h"
 #include "buzzer.h"
 
+#include "bsp_init.h"
 #include "bsp_log.h"
 
 osThreadId_t insTaskHandle;
@@ -33,8 +34,10 @@ void StartUITASK(void *argument);
  * @brief 初始化机器人任务,所有持续运行的任务都在这里初始化
  *
  */
-void OSTaskInit()
+void OSTaskInit(void)
 {
+    BSPTaskInit(); // 创建BSP运行期资源和后台任务,application层不直接关心具体BSP任务入口
+
     const osThreadAttr_t insTaskAttr = {
         .name = "instask",
         .stack_size = 1024 * 4,
@@ -87,8 +90,7 @@ __attribute__((noreturn)) void StartINSTASK(void *argument)
         INS_Task();
         ins_dt = DWT_GetTimeline_ms() - ins_start;
         if (ins_dt > 1)
-            LOGERROR("[freeRTOS] INS Task is being DELAY! dt = [%f]", &ins_dt);
-        VisionSend(); // 解算完成后发送视觉数据,但是当前的实现不太优雅,后续若添加硬件触发需要重新考虑结构的组织
+            LOGERROR("[freeRTOS] INS Task is being DELAY! dt = [%d] us", (int)(ins_dt * 1000.0f));
         osDelay(1);
     }
 }
@@ -104,7 +106,7 @@ __attribute__((noreturn)) void StartMOTORTASK(void *argument)
         MotorControlTask();
         motor_dt = DWT_GetTimeline_ms() - motor_start;
         if (motor_dt > 1)
-            LOGERROR("[freeRTOS] MOTOR Task is being DELAY! dt = [%f]", &motor_dt);
+            LOGERROR("[freeRTOS] MOTOR Task is being DELAY! dt = [%d] us", (int)(motor_dt * 1000.0f));
         osDelay(1);
     }
 }
@@ -123,7 +125,7 @@ __attribute__((noreturn)) void StartDAEMONTASK(void *argument)
         BuzzerTask();
         daemon_dt = DWT_GetTimeline_ms() - daemon_start;
         if (daemon_dt > 10)
-            LOGERROR("[freeRTOS] Daemon Task is being DELAY! dt = [%f]", &daemon_dt);
+            LOGERROR("[freeRTOS] Daemon Task is being DELAY! dt = [%d] us", (int)(daemon_dt * 1000.0f));
         osDelay(10);
     }
 }
@@ -140,7 +142,7 @@ __attribute__((noreturn)) void StartROBOTTASK(void *argument)
         RobotTask();
         robot_dt = DWT_GetTimeline_ms() - robot_start;
         if (robot_dt > 5)
-            LOGERROR("[freeRTOS] ROBOT core Task is being DELAY! dt = [%f]", &robot_dt);
+            LOGERROR("[freeRTOS] ROBOT core Task is being DELAY! dt = [%d] us", (int)(robot_dt * 1000.0f));
         osDelay(5);
     }
 }

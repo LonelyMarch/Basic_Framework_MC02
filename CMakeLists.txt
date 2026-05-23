@@ -56,14 +56,21 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Middlewares/Third_Party/SEGGER/RTT/SEGGER_RTT_ASM_ARMv7M.s
 
     bsp/dwt/bsp_dwt.c
+    bsp/bsp_init.c
+    bsp/bsp_frame_queue.c
+    bsp/adc/bsp_adc.c
     bsp/pwm/bsp_pwm.c
     bsp/gpio/bsp_gpio.c
     bsp/spi/bsp_spi.c
     bsp/iic/bsp_iic.c
     bsp/can/bsp_can.c
     bsp/usart/bsp_usart.c
+    bsp/usb/bsp_usb.c
+    bsp/bsp_service.c
     bsp/log/bsp_log.c
-    bsp/bsp_tools.c
+    bsp/flash/bsp_flash.c
+    bsp/flash/bsp_flash_async.c
+    bsp/qspi_flash/bsp_qspi_flash.c
 
     modules/algorithm/controller.c
     modules/algorithm/kalman_filter.c
@@ -115,10 +122,14 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     bsp/dwt
     bsp/can
     bsp/usart
+    bsp/usb
     bsp/gpio
     bsp/spi
     bsp/iic
     bsp/log
+    bsp/flash
+    bsp/qspi_flash
+    bsp/adc
     bsp/pwm
     bsp
 
@@ -152,7 +163,10 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     ARM_MATH_CM7
-    DISABLE_LOG_SYSTEM
+    $<$<CONFIG:Debug>:DISABLE_LOG_SYSTEM=0>
+    $<$<CONFIG:Release>:DISABLE_LOG_SYSTEM=1>
+    $<$<CONFIG:RelWithDebInfo>:DISABLE_LOG_SYSTEM=1>
+    $<$<CONFIG:MinSizeRel>:DISABLE_LOG_SYSTEM=1>
 )
 
 # Remove wrong libob.a library dependency when using cpp files

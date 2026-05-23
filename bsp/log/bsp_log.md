@@ -1,50 +1,53 @@
 # bsp_log
 
-<p align='right'>neozng1@hnu.edu.cn</p>
+`bsp_log` 是 BSP 日志接口。默认后端为 SEGGER RTT,调度器启动后日志进入内部队列,由 `BSPServiceTask` 统一输出。
 
-## 使用说明
-
-bsp_log是基于segger RTT实现的日志打印模块。
-
-推荐使用`bsp_log.h`中提供了三级日志：
+## 接口
 
 ```c
-#define LOGINFO(format,...)
-#define LOGWARNING(format,...)
-#define LOGERROR(format,...)
+LOGINFO("system init ok");
+LOGWARNING("value:%d", value);
+LOGERROR("error:%d", err);
+LOG("raw text");
 ```
 
-分别用于输出不同等级的日志。注意RTT不支持直接使用`%f`进行浮点格式化,要使用`void Float2Str(char *str, float va);`转化成字符串之后再发送。
+日志接口不支持浮点格式化输出。需要打印浮点值时,建议先换算成整数单位。
 
-**若想启用RTT，必须通过`launch.json`的`debug-jlink`启动调试（不论使用什么调试器）。** 按照`VSCode+Ozone环境配置`完成配置之后的cmsis dap和daplink是可以支持Jlink全家桶的。
+Debug 配置默认保留日志。Release、RelWithDebInfo、MinSizeRel 等配置可通过 `DISABLE_LOG_SYSTEM=1` 关闭 `LOGINFO/LOGWARNING/LOGERROR`。
 
-另外，若你使用的是cmsis-dap和daplink，**请在 *jlink* 调试任务启动之后再打开`log`任务。**（均在项目文件夹下的.vsocde/task.json中，有注释自行查看）。否则可能出线RTT viewer无法连接客户端的情况。
+## 队列化输出
 
-在ozone中查看log输出，直接打开console调试任务台和terminal调试中断便可看到调试输出。
+FreeRTOS 调度器启动前还没有 `BSPServiceTask`,日志会直接输出到 RTT,方便查看早期初始化问题。
 
-> 由于ozone版本的原因，可能出现日志不换行或没有颜色。
+调度器启动后,日志流程为:
 
-## 自定义输出
+```text
+LOG宏 -> 格式化到短buffer -> 投递到日志队列 -> BSPServiceTask统一输出RTT/USB
+```
 
-你也可以自定义输出格式，详见Segger RTT的文档。
+单条日志最大长度由 `BSP_LOG_LINE_SIZE` 控制。队列深度由 `BSP_LOG_QUEUE_SIZE` 控制。队列满时新日志会被丢弃,可通过 `BSPLogGetDroppedCount()` 查看。
+
+## 中断约束
+
+日志格式化和 RTT/USB 输出都不适合在 ISR 中执行。若 ISR 中误调用 LOG 宏,该条日志会被丢弃并计入丢弃计数。
+
+中断中的错误应优先使用计数器记录,由任务上下文再统一查看或输出。
+
+## 输出后端
+
+默认只输出到 RTT:
 
 ```c
-int printf_log(const char *fmt, ...);
-void Float2Str(char *str, float va); // 输出浮点需要先用此函数进行转换
+#define BSP_LOG_USE_USB 0U
 ```
 
-调用第一个函数，可以通过jlink或dap-link向调试器连接的上位机发送信息，格式和printf相同，示例如下：
+若定义 `BSP_LOG_USE_USB=1`,日志会额外调用 `USBTransmit()` 发送到 USB CDC。但 USB 可能同时承担视觉、VOFA 或调试数据通道,开启前需要确认不会互相抢占。
 
-```c
-printf_log("Hello World!\n");
-printf_log("Motor %d met some problem, error code %d!\n",3,1);
-```
+## 调试工具
 
-第二个函数可以将浮点类型转换成字符串以方便发送：
+RTT 日志可通过 J-Link RTT Viewer、J-Scope、Ozone 或支持 RTT 的调试环境查看。
 
-```c
-float current_feedback=114.514;
-char* str_buff[64];
-Float2Str(str_buff,current_feedback);
-printf_log("Motor %d met some problem, error code %d!\n",3,1);
-```
+## 后续扩展
+
+- 若 USB 日志后端长期启用,建议进一步处理 `log -> USBTransmit()` 与 USB 内部日志之间的潜在递归。
+- 高频任务中仍应节制日志频率,队列化只降低输出阻塞,不消除格式化开销。

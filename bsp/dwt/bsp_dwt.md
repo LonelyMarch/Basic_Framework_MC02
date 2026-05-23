@@ -1,54 +1,56 @@
 # bsp_dwt
 
-DWT是stm32内部的一个"隐藏资源",他的用途是给下载器提供准确的定时,从而为调试信息加上时间戳.并在固定的时间间隔将调试数据发送到你的xxlink上.
+`bsp_dwt` 使用 Cortex-M7 内核的 `DWT->CYCCNT` 作为高精度时间基准,用于时间间隔测量、系统运行时间轴和短时间忙等待延时。
 
-## 常用功能
-
-### 计算两次进入同一个函数的时间间隔
+## 初始化
 
 ```c
-static uint32_t cnt;
-float deltaT;
-
-deltaT=DWT_GetDeltaT(&cnt);
+DWT_Init(SystemCoreClock / 1000000U);
 ```
 
-### 计算执行某部分代码的耗时
+参数单位为 MHz。当前由 `BSPInit()` 使用 `SystemCoreClock` 自动换算,避免系统主频调整后忘记同步修改。
+
+## 时间接口
 
 ```c
-float start,end;
-start=DWT_DetTimeline_ms();
-
-// some proc to go... 
-for(uint8_t i=0;i<10;i++)
- foo();
-
-end = DWT_DetTimeline_ms()-start;
+float DWT_GetDeltaT(uint32_t *cnt_last);
+double DWT_GetDeltaT64(uint32_t *cnt_last);
+float DWT_GetTimeline_s(void);
+float DWT_GetTimeline_ms(void);
+uint64_t DWT_GetTimeline_us(void);
 ```
 
-我们还提供了一个宏用于调试计时:
+`DWT_GetDeltaT()` 适合计算周期任务的 `dt`。`DWT_GetTimeline_us()` 使用 64 位时间轴,更适合长时间运行后的微秒时间戳。
+
+## 64位时间轴
+
+STM32H723 在 480MHz 下,32 位 `CYCCNT` 大约 8.95s 溢出一次。BSP 内部用溢出扩展维护 64 位 cycle 计数,并在极短临界区内完成读取和溢出判断,避免任务/中断并发读取时出现时间轴跳变。
+
+TIM6 当前用于每 1s 调用一次 `DWT_SysTimeUpdate()`,防止系统长时间没有主动读取 DWT 时漏记 `CYCCNT` 溢出。
+
+## 短延时
 
 ```c
-#define TIME_ELAPSE(dt, code)                    \
-    do                                           \
-    {                                            \
-        float tstart = DWT_GetTimeline_s();      \
-        code;                                    \
-        dt = DWT_GetTimeline_s() - tstart;       \
-        LOGINFO("[DWT] " #dt " = %f s\r\n", dt); \
-    } while (0)
-
+DWT_Delay(0.0005f);
 ```
 
-传入一个float类型的变量,并将你要执行的代码写入第二个参数:
+`DWT_Delay()` 是忙等待,适合初始化阶段、关中断场景和 us/ms 级短时序。FreeRTOS 任务中需要较长等待时,应优先使用 `osDelay()` 或状态机。
+
+单次忙等待不能跨越过长时间。当前实现会限制过长延时并输出错误日志。
+
+## 调试宏
 
 ```c
-    static float my_func_dt;
-    TIME_ELAPSE(my_func_dt,
-                Function1(vara);
-                Function2(some, var);
-                Function3(your,param);
-                 // something more
-                 );
-    // my_func_dt can be used for other purpose then;
+float dt;
+TIME_ELAPSE(dt, {
+    SomeFunction();
+});
 ```
+
+`TIME_ELAPSE()` 会计算代码块耗时并通过 BSP 日志输出,适合临时调试。高频路径中不建议长期保留该宏。
+
+## 注意事项
+
+- DWT 是内核计数器,不依赖外设定时器引脚。
+- 该模块不负责 FreeRTOS tick,也不替代系统调度延时。
+- `DWT_SysTimeUpdate()` 只维护时间轴,不应放入耗时逻辑。
