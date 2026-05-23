@@ -3,25 +3,25 @@
 #include "bsp_pwm.h"
 #define BUZZER_DEVICE_CNT 5
 
-#define  DoFreq  523
-#define  ReFreq  587
-#define  MiFreq  659
-#define  FaFreq  698
-#define  SoFreq  784
-#define  LaFreq  880
-#define  SiFreq  988
+#define BUZZER_NOTE_DO_FREQ_HZ 523U
+#define BUZZER_NOTE_RE_FREQ_HZ 587U
+#define BUZZER_NOTE_MI_FREQ_HZ 659U
+#define BUZZER_NOTE_FA_FREQ_HZ 698U
+#define BUZZER_NOTE_SO_FREQ_HZ 784U
+#define BUZZER_NOTE_LA_FREQ_HZ 880U
+#define BUZZER_NOTE_SI_FREQ_HZ 988U
 
 typedef enum
 {
-    OCTAVE_1 = 0,
-    OCTAVE_2,
-    OCTAVE_3,
-    OCTAVE_4,
-    OCTAVE_5,
-    OCTAVE_6,
-    OCTAVE_7,
-    OCTAVE_8,
-}octave_e;
+    BUZZER_NOTE_DO = 0,
+    BUZZER_NOTE_RE,
+    BUZZER_NOTE_MI,
+    BUZZER_NOTE_FA,
+    BUZZER_NOTE_SO,
+    BUZZER_NOTE_LA,
+    BUZZER_NOTE_SI,
+    BUZZER_NOTE_COUNT,
+} BuzzerNote_e;
 
 typedef enum
 {
@@ -40,21 +40,21 @@ typedef enum
 typedef struct
 {
     AlarmLevel_e alarm_level;
-    octave_e octave;
+    BuzzerNote_e note;
     float loudness;
 }Buzzer_config_s;
 
 typedef struct
 {
     float loudness;
-    octave_e octave;
+    BuzzerNote_e note;
     AlarmLevel_e alarm_level;
     AlarmState_e alarm_state;
-}BuzzzerInstance;
+}BuzzerInstance;
 
 
 void BuzzerInit();
 void BuzzerTask();
-BuzzzerInstance *BuzzerRegister(Buzzer_config_s *config);
-void AlarmSetStatus(BuzzzerInstance *buzzer, AlarmState_e state);
+BuzzerInstance *BuzzerRegister(Buzzer_config_s *config);
+void AlarmSetStatus(BuzzerInstance *buzzer, AlarmState_e state);
 #endif // !BUZZER_H
