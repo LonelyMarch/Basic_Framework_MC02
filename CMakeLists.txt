@@ -75,6 +75,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     modules/algorithm/controller.c
     modules/algorithm/kalman_filter.c
     modules/algorithm/QuaternionEKF.c
+    modules/algorithm/chassis_kinematics.c
+    modules/algorithm/algo_filter.c
     modules/algorithm/crc8.c
     modules/algorithm/crc16.c
     modules/algorithm/user_lib.c

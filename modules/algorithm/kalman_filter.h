@@ -22,15 +22,15 @@
 #define ARM_MATH_DSP    // define in arm_math.h
 */
 
-//#include "stm32f407xx.h"
 #include "arm_math.h"
-//#include "dsp/matrix_functions.h"
+#include "cmsis_os.h"
 #include "math.h"
 #include "stdint.h"
 #include "stdlib.h"
 
 #ifndef user_malloc
-#ifdef _CMSIS_OS_H
+#if defined(CMSIS_OS_H_) || defined(CMSIS_OS2_H_)
+#include "FreeRTOS.h"
 #define user_malloc pvPortMalloc
 #else
 #define user_malloc malloc
@@ -46,6 +46,16 @@
 #define Matrix_Transpose arm_mat_trans_f32
 #define Matrix_Inverse arm_mat_inverse_f32
 
+typedef enum
+{
+    KALMAN_FILTER_OK = 0,
+    KALMAN_FILTER_ERROR_NULL_PTR,
+    KALMAN_FILTER_ERROR_INVALID_SIZE,
+    KALMAN_FILTER_ERROR_ALLOC_FAILED,
+    KALMAN_FILTER_ERROR_MATRIX_FAILED,
+    KALMAN_FILTER_ERROR_MEASUREMENT_MAP,
+} KalmanFilterError_e;
+
 typedef struct kf_t
 {
     float *FilteredValue;
@@ -58,6 +68,8 @@ typedef struct kf_t
 
     uint8_t UseAutoAdjustment;
     uint8_t MeasurementValidNum;
+    uint8_t Initialized; // 初始化完成标志,初始化失败时滤波更新会直接返回NULL
+    uint8_t ErrorCode;   // 最近一次初始化或更新的错误码,取值见KalmanFilterError_e
 
     uint8_t *MeasurementMap;      // 量测与状态的关系 how measurement relates to the state
     float *MeasurementDegree;     // 测量值对应H矩阵元素值 elements of each measurement in H

@@ -11,50 +11,38 @@
  *
  ******************************************************************************
  */
-#include "stdlib.h"
-#include "memory.h"
 #include "user_lib.h"
-#include "math.h"
+#include <string.h>
 #include "main.h"
-
-#ifdef _CMSIS_OS_H
-#define user_malloc pvPortMalloc
-#else
-#define user_malloc malloc
-#endif
 
 void *zmalloc(size_t size)
 {
-    void *ptr = malloc(size);
+    if (size == 0U)
+    {
+        return NULL;
+    }
+
+    void *ptr = user_malloc(size);
+    if (ptr == NULL)
+    {
+        return NULL;
+    }
+
     memset(ptr, 0, size);
     return ptr;
 }
 
-// 快速开方
+// 快速开方,在当前工程中由CMSIS-DSP内联到sqrtf/硬件FPU路径
 float Sqrt(float x)
 {
-    float y;
-    float delta;
-    float maxError;
-
-    if (x <= 0)
+    float result;
+    if (x <= 0.0f)
     {
-        return 0;
+        return 0.0f;
     }
 
-    // initial guess
-    y = x / 2;
-
-    // refine
-    maxError = x * 0.001f;
-
-    do
-    {
-        delta = (y * y) - x;
-        y -= delta / (2 * y);
-    } while (delta > maxError || delta < -maxError);
-
-    return y;
+    (void)arm_sqrt_f32(x, &result);
+    return result;
 }
 
 // 绝对值限制
@@ -119,7 +107,7 @@ int16_t int16_constrain(int16_t Value, int16_t minValue, int16_t maxValue)
 // 循环限幅函数
 float loop_float_constrain(float Input, float minValue, float maxValue)
 {
-    if (maxValue < minValue)
+    if (maxValue <= minValue)
     {
         return Input;
     }
@@ -153,10 +141,9 @@ float theta_format(float Ang)
 
 int float_rounding(float raw)
 {
-    static int integer;
-    static float decimal;
-    integer = (int)raw;
-    decimal = raw - integer;
+    int integer = (int)raw;
+    float decimal = raw - (float)integer;
+
     if (decimal > 0.5f)
         integer++;
     return integer;
@@ -165,22 +152,43 @@ int float_rounding(float raw)
 // 三维向量归一化
 float *Norm3d(float *v)
 {
+    if (v == NULL)
+    {
+        return NULL;
+    }
+
     float len = Sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    v[0] /= len;
-    v[1] /= len;
-    v[2] /= len;
+    if (len <= 0.0f)
+    {
+        return v;
+    }
+
+    float inv_len = 1.0f / len;
+    v[0] *= inv_len;
+    v[1] *= inv_len;
+    v[2] *= inv_len;
     return v;
 }
 
 // 计算模长
 float NormOf3d(float *v)
 {
+    if (v == NULL)
+    {
+        return 0.0f;
+    }
+
     return Sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 }
 
 // 三维向量叉乘v1 x v2
 void Cross3d(float *v1, float *v2, float *res)
 {
+    if (v1 == NULL || v2 == NULL || res == NULL)
+    {
+        return;
+    }
+
     res[0] = v1[1] * v2[2] - v1[2] * v2[1];
     res[1] = v1[2] * v2[0] - v1[0] * v2[2];
     res[2] = v1[0] * v2[1] - v1[1] * v2[0];
@@ -189,13 +197,29 @@ void Cross3d(float *v1, float *v2, float *res)
 // 三维向量点乘
 float Dot3d(float *v1, float *v2)
 {
+    if (v1 == NULL || v2 == NULL)
+    {
+        return 0.0f;
+    }
+
     return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
 }
 
 // 均值滤波,删除buffer中的最后一个元素,填入新的元素并求平均值
 float AverageFilter(float new_data, float *buf, uint8_t len)
 {
-    float sum = 0;
+    if (buf == NULL || len == 0U)
+    {
+        return new_data;
+    }
+
+    if (len == 1U)
+    {
+        buf[0] = new_data;
+        return new_data;
+    }
+
+    float sum = 0.0f;
     for (uint8_t i = 0; i < len - 1; i++)
     {
         buf[i] = buf[i + 1];
@@ -208,7 +232,16 @@ float AverageFilter(float new_data, float *buf, uint8_t len)
 
 void MatInit(mat *m, uint8_t row, uint8_t col)
 {
-    m->numCols = col;
-    m->numRows = row;
-    m->pData = (float *)zmalloc(row * col * sizeof(float));
+    if (m == NULL)
+    {
+        return;
+    }
+
+    float *data = NULL;
+    if (row != 0U && col != 0U)
+    {
+        data = (float *)zmalloc((size_t)row * (size_t)col * sizeof(float));
+    }
+
+    arm_mat_init_f32(m, row, col, data);
 }

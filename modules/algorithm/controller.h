@@ -15,15 +15,8 @@
 
 #include "main.h"
 #include "stdint.h"
-#include "memory.h"
-#include "stdlib.h"
 #include "bsp_dwt.h"
-#include "arm_math.h"
 #include <math.h>
-
-#ifndef abs
-#define abs(x) ((x > 0) ? x : -x)
-#endif
 
 // PID 优化环节使能标志位,通过位与可以判断启用的优化环节;也可以改成位域的形式
 typedef enum
@@ -67,7 +60,7 @@ typedef struct
     PID_Improvement_e Improve;
     float IntegralLimit;     // 积分限幅
     float CoefA;             // 变速积分 For Changing Integral
-    float CoefB;             // 变速积分 ITerm = Err*((A-abs(err)+B)/A)  when B<|err|<A+B
+    float CoefB;             // 变速积分 ITerm = Err*((A-|err|+B)/A)  when B<|err|<A+B
     float Output_LPF_RC;     // 输出滤波器 RC = 1/omegac
     float Derivative_LPF_RC; // 微分滤波器系数
 
@@ -110,7 +103,7 @@ typedef struct // config parameter
     PID_Improvement_e Improve;
     float IntegralLimit; // 积分限幅
     float CoefA;         // AB为变速积分参数,变速积分实际上就引入了积分分离
-    float CoefB;         // ITerm = Err*((A-abs(err)+B)/A)  when B<|err|<A+B
+    float CoefB;         // ITerm = Err*((A-|err|+B)/A)  when B<|err|<A+B
     float Output_LPF_RC; // RC = 1/omegac
     float Derivative_LPF_RC;
 } PID_Init_Config_s;

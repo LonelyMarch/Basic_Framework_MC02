@@ -29,6 +29,7 @@ typedef struct
     KalmanFilter_t IMU_QuaternionEKF;
     uint8_t ConvergeFlag;
     uint8_t StableFlag;
+    uint8_t AccelValidFlag; // 当前周期加速度量测是否可用于姿态修正
     uint64_t ErrorCount;
     uint64_t UpdateCount;
 
@@ -67,8 +68,6 @@ typedef struct
 } QEKF_INS_t;
 
 extern QEKF_INS_t QEKF_INS;
-extern float chiSquare;
-extern float ChiSquareTestThreshold;
 void IMU_QuaternionEKF_Init(float* init_quaternion,float process_noise1, float process_noise2, float measure_noise, float lambda, float lpf);
 void IMU_QuaternionEKF_Update(float gx, float gy, float gz, float ax, float ay, float az, float dt);
 

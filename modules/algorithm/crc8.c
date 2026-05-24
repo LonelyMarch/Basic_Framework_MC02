@@ -1,13 +1,10 @@
 #include "crc8.h"
 
 /*
- * static uint8_t sht75_crc_table[];
- *
- * The SHT75 humidity sensor is capable of calculating an 8 bit CRC checksum to
- * ensure data integrity. The lookup table crc_table[] is used to recalculate
- * the CRC.
+ * CRC8查表。表内容与原SHT75 CRC8表保持一致,当前用于CANComm/视觉协议等短帧校验。
+ * 使用const可将查找表放入只读段,避免占用可写RAM并防止运行期误写。
  */
-static uint8_t sht75_crc_table[] =
+static const uint8_t crc8_table[256] =
     {
         0, 49, 98, 83, 196, 245, 166, 151, 185, 136, 219, 234, 125, 76, 31, 46,
         67, 114, 33, 16, 135, 182, 229, 212, 250, 203, 152, 169, 62, 15, 92, 109,
@@ -43,7 +40,7 @@ uint8_t crc_8(const uint8_t *input_str, uint16_t num_bytes)
     if (ptr != NULL)
         for (a = 0; a < num_bytes; a++)
         {
-            crc = sht75_crc_table[(*ptr++) ^ crc];
+            crc = crc8_table[(*ptr++) ^ crc];
         }
     return crc;
 }
@@ -57,5 +54,5 @@ uint8_t crc_8(const uint8_t *input_str, uint16_t num_bytes)
 
 uint8_t update_crc_8(uint8_t crc, uint8_t val)
 {
-    return sht75_crc_table[val ^ crc];
+    return crc8_table[val ^ crc];
 }

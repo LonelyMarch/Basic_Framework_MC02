@@ -13,17 +13,18 @@
 #ifndef _USER_LIB_H
 #define _USER_LIB_H
 
+#include <stddef.h>
 #include "stdint.h"
 #include "main.h"
 #include "cmsis_os.h"
-//#include "stm32f407xx.h"
 #include "arm_math.h"
 
-
 #ifndef user_malloc
-#ifdef _CMSIS_OS_H
+#if defined(CMSIS_OS_H_) || defined(CMSIS_OS2_H_)
+#include "FreeRTOS.h"
 #define user_malloc pvPortMalloc
 #else
+#include <stdlib.h>
 #define user_malloc malloc
 #endif
 #endif
@@ -84,29 +85,24 @@ void MatInit(mat *m, uint8_t row, uint8_t col);
 #define VAL_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define VAL_MAX(a, b) ((a) > (b) ? (a) : (b))
 
-/**
- * @brief 返回一块干净的内�?,不过仍然需要强制转�?为你需要的类型
- *
- * @param size 分配大小
- * @return void*
- */
+/* 申请并清零一块内存,返回值仍需要由调用者转换为目标类型。 */
 void *zmalloc(size_t size);
 
-// ���ٿ���
+// 快速开方
 float Sqrt(float x);
-// ��������
+// 绝对值限幅
 float abs_limit(float num, float Limit);
-// �жϷ���λ
+// 符号判断
 float sign(float value);
-// ��������
+// 浮点死区
 float float_deadband(float Value, float minValue, float maxValue);
-// �޷�����
+// 浮点限幅
 float float_constrain(float Value, float minValue, float maxValue);
-// �޷�����
+// int16限幅
 int16_t int16_constrain(int16_t Value, int16_t minValue, int16_t maxValue);
-// ѭ���޷�����
+// 循环限幅
 float loop_float_constrain(float Input, float minValue, float maxValue);
-// �Ƕ� ���޷� 180 ~ -180
+// 角度格式化到 -180 ~ 180
 float theta_format(float Ang);
 
 int float_rounding(float raw);
