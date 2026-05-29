@@ -80,10 +80,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     modules/algorithm/crc8.c
     modules/algorithm/crc16.c
     modules/algorithm/user_lib.c
-    modules/bluetooth/HC05.c
     modules/BMI088/bmi088.c
-    modules/imu/BMI088driver.c
-    modules/imu/BMI088Middleware.c
     modules/imu/ins_task.c
     modules/master_machine/master_process.c
     modules/master_machine/seasky_protocol.c
@@ -136,7 +133,6 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     bsp
 
     modules/algorithm
-    modules/bluetooth
     modules/BMI088
     modules/imu
     modules/master_machine

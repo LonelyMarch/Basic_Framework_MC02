@@ -16,12 +16,19 @@
 #define __INS_TASK_H
 
 #include "stdint.h"
-#include "BMI088driver.h"
 #include "QuaternionEKF.h"
 
-#define X 0
-#define Y 1
-#define Z 2
+/**
+ * @brief IMU三轴数组下标
+ *
+ * 不使用X/Y/Z这类短宏,避免污染CMSIS/HAL头文件中的同名字段。
+ */
+typedef enum
+{
+    IMU_AXIS_X = 0,
+    IMU_AXIS_Y = 1,
+    IMU_AXIS_Z = 2,
+} IMU_Axis_e;
 
 #define INS_TASK_PERIOD 1
 
@@ -38,6 +45,8 @@ typedef struct
 
 typedef struct
 {
+    attitude_t attitude; // 对外发布的姿态视图,application层只持有该结构体指针
+
     float q[4]; // 四元数估计值
 
     float MotionAccel_b[3]; // 机体坐标加速度
@@ -54,28 +63,20 @@ typedef struct
     // float atanxz;
     // float atanyz;
 
-    // IMU量测值
-    float Gyro[3];  // 角速度
-    float Accel[3]; // 加速度
-    // 位姿
-    float Roll;
-    float Pitch;
-    float Yaw;
-    float YawTotalAngle;
-
     uint8_t init;
 } INS_t;
 
 /* 用于修正安装误差的参数 */
 typedef struct
 {
-    uint8_t flag;
+    uint8_t flag; // 参数变更标志,置1后会在下一次修正时重算安装旋转矩阵
 
-    float scale[3];
+    float gyro_scale[3];  // 陀螺仪三轴比例修正系数,默认全1
+    float accel_scale[3]; // 加速度计三轴比例修正系数,默认全1
 
-    float Yaw;
-    float Pitch;
-    float Roll;
+    float Yaw;   // IMU安装偏航误差,单位deg
+    float Pitch; // IMU安装俯仰误差,单位deg
+    float Roll;  // IMU安装横滚误差,单位deg
 } IMU_Param_t;
 
 /**

@@ -1,7 +1,9 @@
 #include "bsp_gpio.h"
 #include "bsp_log.h"
 #include "bsp_service.h"
+#include "FreeRTOS.h"
 #include "memory.h"
+#include "task.h"
 
 static uint8_t idx;
 static GPIOInstance gpio_instance_pool[GPIO_MX_DEVICE_NUM]; // GPIO实例静态池,控制结构体放默认.bss/DTCM
@@ -48,6 +50,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     // 如有必要,可以根据pinstate和HAL_GPIO_ReadPin来判断是上升沿还是下降沿/rise&fall等
     // 注意: EXTI中断中只投递事件,真正的gpio_model_callback由BSP服务任务在任务上下文执行
+    if (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING)
+    {
+        /*
+         * RobotInit结束到FreeRTOS调度器启动之间可能已经打开全局中断。
+         * 此时BSPServiceTask还不存在,不要从ISR调用FreeRTOS队列接口;
+         * 早期GPIO事件直接丢弃,运行期外设会继续产生新的事件。
+         */
+        return;
+    }
+
     GPIOInstance *gpio;
     for (size_t i = 0; i < idx; i++)
     {
