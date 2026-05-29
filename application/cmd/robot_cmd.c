@@ -1,4 +1,5 @@
 // app
+#include "main.h"
 #include "robot_def.h"
 #include "robot_cmd.h"
 // module
@@ -70,6 +71,11 @@ void RobotCMDInit()
         .send_data_len = sizeof(Chassis_Ctrl_Cmd_s),
     };
     cmd_can_comm = CANCommInit(&comm_conf);
+    if (cmd_can_comm == NULL)
+    {
+        LOGERROR("[cmd] CANComm init failed");
+        Error_Handler();
+    }
 #endif // GIMBAL_BOARD
     gimbal_cmd_send.pitch = 0;
 
@@ -283,7 +289,13 @@ void RobotCMDTask()
     SubGetMessage(chassis_feed_sub, (void *)&chassis_fetch_data);
 #endif // ONE_BOARD
 #ifdef GIMBAL_BOARD
-    chassis_fetch_data = *(Chassis_Upload_Data_s *)CANCommGet(cmd_can_comm);
+    if (CANCommIsOnline(cmd_can_comm) != 0U)
+    {
+        if (CANCommGet(cmd_can_comm, &chassis_fetch_data) == 0U)
+        {
+            // 通信在线但本周期没有新的底盘反馈,保留上一帧数据,避免偶发丢包导致上层状态抖动。
+        }
+    }
 #endif // GIMBAL_BOARD
     SubGetMessage(shoot_feed_sub, &shoot_fetch_data);
     SubGetMessage(gimbal_feed_sub, &gimbal_fetch_data);
@@ -307,7 +319,7 @@ void RobotCMDTask()
     PubPushMessage(chassis_cmd_pub, (void *)&chassis_cmd_send);
 #endif // ONE_BOARD
 #ifdef GIMBAL_BOARD
-    CANCommSend(cmd_can_comm, (void *)&chassis_cmd_send);
+    (void)CANCommSend(cmd_can_comm, (const uint8_t *)&chassis_cmd_send);
 #endif // GIMBAL_BOARD
     PubPushMessage(shoot_cmd_pub, (void *)&shoot_cmd_send);
     PubPushMessage(gimbal_cmd_pub, (void *)&gimbal_cmd_send);

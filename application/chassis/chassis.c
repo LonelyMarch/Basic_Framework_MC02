@@ -12,6 +12,7 @@
  */
 
 #include "chassis.h"
+#include "main.h"
 #include "robot_def.h"
 #include "dji_motor.h"
 #include "super_cap.h"
@@ -20,6 +21,7 @@
 
 #include "general_def.h"
 #include "bsp_dwt.h"
+#include "bsp_log.h"
 #include "referee_UI.h"
 #include "arm_math.h"
 
@@ -127,6 +129,11 @@ void ChassisInit()
         .send_data_len = sizeof(Chassis_Upload_Data_s),
     };
     chasiss_can_comm = CANCommInit(&comm_conf); // can comm初始化
+    if (chasiss_can_comm == NULL)
+    {
+        LOGERROR("[chassis] CANComm init failed");
+        Error_Handler();
+    }
 #endif                                          // CHASSIS_BOARD
 
 #ifdef ONE_BOARD // 单板控制整车,则通过pubsub来传递消息
@@ -189,7 +196,18 @@ void ChassisTask()
     SubGetMessage(chassis_sub, &chassis_cmd_recv);
 #endif
 #ifdef CHASSIS_BOARD
-    chassis_cmd_recv = *(Chassis_Ctrl_Cmd_s *)CANCommGet(chasiss_can_comm);
+    if (CANCommIsOnline(chasiss_can_comm) == 0U)
+    {
+        // 双板通信离线时不能继续执行最后一帧控制命令,强制底盘进入零力安全状态。
+        chassis_cmd_recv.chassis_mode = CHASSIS_ZERO_FORCE;
+        chassis_cmd_recv.vx = 0.0f;
+        chassis_cmd_recv.vy = 0.0f;
+        chassis_cmd_recv.wz = 0.0f;
+    }
+    else if (CANCommGet(chasiss_can_comm, &chassis_cmd_recv) == 0U)
+    {
+        // 通信在线但本周期没有新的云台板控制命令,保留上一帧数据,避免偶发丢包导致底盘抖动。
+    }
 #endif // CHASSIS_BOARD
 
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
@@ -252,6 +270,6 @@ void ChassisTask()
     PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
 #endif
 #ifdef CHASSIS_BOARD
-    CANCommSend(chasiss_can_comm, (void *)&chassis_feedback_data);
+    (void)CANCommSend(chasiss_can_comm, (const uint8_t *)&chassis_feedback_data);
 #endif // CHASSIS_BOARD
 }
