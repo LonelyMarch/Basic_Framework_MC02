@@ -91,7 +91,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     modules/motor/step_motor/step_motor.c
     modules/motor/servo_motor/servo_motor.c
     modules/motor/motor_task.c
-    modules/oled/oled.c
+    modules/lcd/lcd.c
     modules/referee/crc_ref.c
     modules/referee/rm_referee.c
     modules/referee/referee_UI.c
@@ -143,7 +143,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     modules/motor/servo_motor
     modules/motor/DMmotor
     modules/motor
-    modules/oled
+    modules/lcd
     modules/referee
     modules/remote
     modules/super_cap

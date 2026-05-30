@@ -37,6 +37,7 @@ static SPIInstance *spi_instance[SPI_MX_INSTANCE_CNT] = {NULL};
 static SPIBusResource spi_bus[SPI_BUS_CNT] = {0};
 static uint8_t idx = 0;     // 已注册的SPI从设备实例数量
 static uint8_t bus_idx = 0; // 已登记的SPI硬件总线数量
+static uint8_t pre_rtos_fallback_warned = 0U; // RTOS启动前IT/DMA降级提示只打印一次,避免初始化阶段刷屏
 
 // DMA1/DMA2无法访问DTCM,因此SPI DMA的内部中转缓冲区必须显式放到RAM_D2。
 static uint8_t spi_dma_tx_buffer[SPI_BUS_CNT][SPI_DMA_BOUNCE_BUFFER_SIZE] SPI_DMA_BUFFER_ATTR;
@@ -61,6 +62,22 @@ __attribute__((noreturn)) static void SPIRegisterErrorHandler(const char *error_
 static uint8_t SPIIsInISR(void)
 {
     return (__get_IPSR() != 0U);
+}
+
+/**
+ * @brief 提示RTOS启动前IT/DMA事务被降级为阻塞事务。
+ *
+ * LCD、BMI088等模块可能在RobotInit阶段注册为DMA/IT模式,但此时FreeRTOS调度器
+ * 尚未运行,没有完成信号量可等待。BSP会自动降级为阻塞事务,并只在首次发生时提示。
+ */
+static void SPIWarnPreRtosFallback(SPI_TXRX_MODE_e mode)
+{
+    if (pre_rtos_fallback_warned == 0U)
+    {
+        LOGWARNING("[bsp_spi] RTOS未启动,SPI %s事务自动降级为阻塞模式",
+                   (mode == SPI_DMA_MODE) ? "DMA" : "IT");
+        pre_rtos_fallback_warned = 1U;
+    }
 }
 
 /**
@@ -589,12 +606,21 @@ HAL_StatusTypeDef SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t 
 {
     HAL_StatusTypeDef status;
     SPIBusResource *bus;
+    SPI_TXRX_MODE_e work_mode;
     uint8_t need_unlock;
 
     if (spi_ins == NULL || ptr_data == NULL || len == 0U)
     {
         LOGERROR("[bsp_spi] SPI发送失败: 参数非法");
         return HAL_ERROR;
+    }
+
+    work_mode = spi_ins->spi_work_mode;
+    if (work_mode != SPI_BLOCK_MODE && osKernelGetState() != osKernelRunning)
+    {
+        // RTOS启动前没有完成信号量可等待,IT/DMA事务自动降级为阻塞事务。
+        SPIWarnPreRtosFallback(work_mode);
+        work_mode = SPI_BLOCK_MODE;
     }
 
     status = SPILockBus(spi_ins, &bus, &need_unlock);
@@ -605,18 +631,12 @@ HAL_StatusTypeDef SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t 
 
     SPISelectDevice(spi_ins, bus);
 
-    switch (spi_ins->spi_work_mode)
+    switch (work_mode)
     {
     case SPI_BLOCK_MODE:
         status = HAL_SPI_Transmit(spi_ins->spi_handle, ptr_data, len, SPI_HAL_TIMEOUT_MS);
         break;
     case SPI_IT_MODE:
-        if (osKernelGetState() != osKernelRunning)
-        {
-            LOGERROR("[bsp_spi] SPI发送失败: IT模式需要在FreeRTOS调度器启动后使用");
-            status = HAL_ERROR;
-            break;
-        }
         SPIClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
         status = HAL_SPI_Transmit_IT(spi_ins->spi_handle, ptr_data, len);
@@ -626,12 +646,6 @@ HAL_StatusTypeDef SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t 
         }
         break;
     case SPI_DMA_MODE:
-        if (osKernelGetState() != osKernelRunning)
-        {
-            LOGERROR("[bsp_spi] SPI发送失败: DMA模式需要在FreeRTOS调度器启动后使用");
-            status = HAL_ERROR;
-            break;
-        }
         status = SPICheckDmaLength(len);
         if (status != HAL_OK)
         {
@@ -672,12 +686,21 @@ HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
 {
     HAL_StatusTypeDef status;
     SPIBusResource *bus;
+    SPI_TXRX_MODE_e work_mode;
     uint8_t need_unlock;
 
     if (spi_ins == NULL || ptr_data == NULL || len == 0U)
     {
         LOGERROR("[bsp_spi] SPI接收失败: 参数非法");
         return HAL_ERROR;
+    }
+
+    work_mode = spi_ins->spi_work_mode;
+    if (work_mode != SPI_BLOCK_MODE && osKernelGetState() != osKernelRunning)
+    {
+        // RTOS启动前没有完成信号量可等待,IT/DMA事务自动降级为阻塞事务。
+        SPIWarnPreRtosFallback(work_mode);
+        work_mode = SPI_BLOCK_MODE;
     }
 
     spi_ins->rx_size = len;
@@ -691,18 +714,12 @@ HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
 
     SPISelectDevice(spi_ins, bus);
 
-    switch (spi_ins->spi_work_mode)
+    switch (work_mode)
     {
     case SPI_BLOCK_MODE:
         status = HAL_SPI_Receive(spi_ins->spi_handle, ptr_data, len, SPI_HAL_TIMEOUT_MS);
         break;
     case SPI_IT_MODE:
-        if (osKernelGetState() != osKernelRunning)
-        {
-            LOGERROR("[bsp_spi] SPI接收失败: IT模式需要在FreeRTOS调度器启动后使用");
-            status = HAL_ERROR;
-            break;
-        }
         SPIClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
         status = HAL_SPI_Receive_IT(spi_ins->spi_handle, ptr_data, len);
@@ -712,12 +729,6 @@ HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
         }
         break;
     case SPI_DMA_MODE:
-        if (osKernelGetState() != osKernelRunning)
-        {
-            LOGERROR("[bsp_spi] SPI接收失败: DMA模式需要在FreeRTOS调度器启动后使用");
-            status = HAL_ERROR;
-            break;
-        }
         status = SPICheckDmaLength(len);
         if (status != HAL_OK)
         {
@@ -744,7 +755,7 @@ HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
         break;
     }
 
-    if (status == HAL_OK && spi_ins->spi_work_mode == SPI_DMA_MODE)
+    if (status == HAL_OK && work_mode == SPI_DMA_MODE)
     {
         SPIInvalidateDCacheByAddr(bus->dma_rx_buffer, len);
         // 复制完成前继续持有总线锁,避免其他任务抢占同一条SPI总线并覆盖内部DMA缓冲区。
@@ -771,12 +782,21 @@ HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8
 {
     HAL_StatusTypeDef status;
     SPIBusResource *bus;
+    SPI_TXRX_MODE_e work_mode;
     uint8_t need_unlock;
 
     if (spi_ins == NULL || ptr_data_rx == NULL || ptr_data_tx == NULL || len == 0U)
     {
         LOGERROR("[bsp_spi] SPI收发失败: 参数非法");
         return HAL_ERROR;
+    }
+
+    work_mode = spi_ins->spi_work_mode;
+    if (work_mode != SPI_BLOCK_MODE && osKernelGetState() != osKernelRunning)
+    {
+        // RTOS启动前没有完成信号量可等待,IT/DMA事务自动降级为阻塞事务。
+        SPIWarnPreRtosFallback(work_mode);
+        work_mode = SPI_BLOCK_MODE;
     }
 
     // 用于稍后回调使用,请保证ptr_data_rx在回调函数被调用之前仍然在作用域内,否则析构之后的行为是未定义的!!!
@@ -791,18 +811,12 @@ HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8
 
     SPISelectDevice(spi_ins, bus);
 
-    switch (spi_ins->spi_work_mode)
+    switch (work_mode)
     {
     case SPI_BLOCK_MODE:
         status = HAL_SPI_TransmitReceive(spi_ins->spi_handle, ptr_data_tx, ptr_data_rx, len, SPI_HAL_TIMEOUT_MS);
         break;
     case SPI_IT_MODE:
-        if (osKernelGetState() != osKernelRunning)
-        {
-            LOGERROR("[bsp_spi] SPI收发失败: IT模式需要在FreeRTOS调度器启动后使用");
-            status = HAL_ERROR;
-            break;
-        }
         SPIClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
         status = HAL_SPI_TransmitReceive_IT(spi_ins->spi_handle, ptr_data_tx, ptr_data_rx, len);
@@ -812,12 +826,6 @@ HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8
         }
         break;
     case SPI_DMA_MODE:
-        if (osKernelGetState() != osKernelRunning)
-        {
-            LOGERROR("[bsp_spi] SPI收发失败: DMA模式需要在FreeRTOS调度器启动后使用");
-            status = HAL_ERROR;
-            break;
-        }
         status = SPICheckDmaLength(len);
         if (status != HAL_OK)
         {
@@ -846,7 +854,7 @@ HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8
         break;
     }
 
-    if (status == HAL_OK && spi_ins->spi_work_mode == SPI_DMA_MODE)
+    if (status == HAL_OK && work_mode == SPI_DMA_MODE)
     {
         SPIInvalidateDCacheByAddr(bus->dma_rx_buffer, len);
         // 复制完成前继续持有总线锁,避免其他任务抢占同一条SPI总线并覆盖内部DMA缓冲区。

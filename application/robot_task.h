@@ -14,6 +14,7 @@
 #include "daemon.h"
 #include "HT04.h"
 #include "buzzer.h"
+#include "lcd.h"
 
 #include "bsp_init.h"
 #include "bsp_log.h"
@@ -37,6 +38,10 @@ void StartUITASK(void *argument);
 void OSTaskInit(void)
 {
     BSPTaskInit(); // 创建BSP运行期资源和后台任务,application层不直接关心具体BSP任务入口
+    if (LCDTaskInit() != HAL_OK)
+    {
+        LOGWARNING("[freeRTOS] LCD Task Init failed, async LCD draw is disabled");
+    }
 
     const osThreadAttr_t insTaskAttr = {
         .name = "instask",
