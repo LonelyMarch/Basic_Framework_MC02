@@ -14,51 +14,50 @@
 #define REMOTE_CONTROL_H
 
 #include <stdint.h>
-#include "main.h"
-#include "usart.h"
+#include "stm32h7xx_hal.h"
 
 // 用于遥控器数据读取,遥控器数据是一个大小为2的数组
-#define LAST 1
-#define TEMP 0
+#define RC_LAST 1
+#define RC_TEMP 0
 
 // 获取按键操作
-#define KEY_PRESS 0
-#define KEY_STATE 1
-#define KEY_PRESS_WITH_CTRL 1
-#define KEY_PRESS_WITH_SHIFT 2
+#define RC_KEY_PRESS 0
+#define RC_KEY_PRESS_WITH_CTRL 1
+#define RC_KEY_PRESS_WITH_SHIFT 2
 
 // 检查接收值是否出错
 #define RC_CH_VALUE_MIN ((uint16_t)364)
 #define RC_CH_VALUE_OFFSET ((uint16_t)1024)
 #define RC_CH_VALUE_MAX ((uint16_t)1684)
+#define REMOTE_CONTROL_CHANNEL_VALID_LIMIT 660 // 摇杆/拨轮解析后超过该绝对值视为异常,直接清零
 
 /* ----------------------- RC Switch Definition----------------------------- */
 #define RC_SW_UP ((uint16_t)1)   // 开关向上时的值
 #define RC_SW_MID ((uint16_t)3)  // 开关中间时的值
 #define RC_SW_DOWN ((uint16_t)2) // 开关向下时的值
 // 三个判断开关状态的宏
-#define switch_is_down(s) (s == RC_SW_DOWN)
-#define switch_is_mid(s) (s == RC_SW_MID)
-#define switch_is_up(s) (s == RC_SW_UP)
+#define switch_is_down(s) ((s) == RC_SW_DOWN)
+#define switch_is_mid(s) ((s) == RC_SW_MID)
+#define switch_is_up(s) ((s) == RC_SW_UP)
 
 /* ----------------------- PC Key Definition-------------------------------- */
-// 对应key[x][0~16],获取对应的键;例如通过key[KEY_PRESS][Key_W]获取W键是否按下,后续改为位域后删除
-#define Key_W 0
-#define Key_S 1
-#define Key_D 2
-#define Key_A 3
-#define Key_Shift 4
-#define Key_Ctrl 5
-#define Key_Q 6
-#define Key_E 7
-#define Key_R 8
-#define Key_F 9
-#define Key_G 10
-#define Key_Z 11
-#define Key_X 12
-#define Key_C 13
-#define Key_V 14
-#define Key_B 15
+// 对应key[x][0~16],获取对应的键;例如通过key[RC_KEY_PRESS][RC_KEY_W]获取W键是否按下
+#define RC_KEY_W 0
+#define RC_KEY_S 1
+#define RC_KEY_D 2
+#define RC_KEY_A 3
+#define RC_KEY_SHIFT 4
+#define RC_KEY_CTRL 5
+#define RC_KEY_Q 6
+#define RC_KEY_E 7
+#define RC_KEY_R 8
+#define RC_KEY_F 9
+#define RC_KEY_G 10
+#define RC_KEY_Z 11
+#define RC_KEY_X 12
+#define RC_KEY_C 13
+#define RC_KEY_V 14
+#define RC_KEY_B 15
 
 /* ----------------------- Data Struct ------------------------------------- */
 // 待测试的位域结构体,可以极大提升解析速度
@@ -118,16 +117,27 @@ typedef struct
 /**
  * @brief 初始化遥控器,该函数会将遥控器注册到串口
  *
- * @attention 注意分配正确的串口硬件,遥控器在C板上使用USART3
+ * @attention 注意分配正确的串口硬件,当前达妙MC02工程中遥控器使用UART5。
  *
  */
 RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
+
+/**
+ * @brief 获取遥控器数据快照
+ *
+ * @note 传入的rc_snapshot必须指向长度为2的RC_ctrl_t数组,分别保存RC_TEMP和RC_LAST。
+ *       这样上层任务读取遥控器数据时不会和USART解析任务发生半更新竞争。
+ *
+ * @param rc_snapshot 输出快照数组
+ * @return uint8_t 1:获取成功 0:尚未初始化或参数非法
+ */
+uint8_t RemoteControlGet(RC_ctrl_t *rc_snapshot);
 
 /**
  * @brief 检查遥控器是否在线,若尚未初始化也视为离线
  *
  * @return uint8_t 1:在线 0:离线
  */
-uint8_t RemoteControlIsOnline();
+uint8_t RemoteControlIsOnline(void);
 
 #endif
