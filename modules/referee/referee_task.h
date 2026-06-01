@@ -14,7 +14,7 @@ referee_info_t *UITaskInit(UART_HandleTypeDef *referee_usart_handle, Referee_Int
  * @brief 在referee task之前调用,添加在freertos.c中
  * 
  */
-void MyUIInit();
+uint8_t MyUIInit(void);
 
 /**
  * @brief 裁判系统交互任务(UI和多机通信)

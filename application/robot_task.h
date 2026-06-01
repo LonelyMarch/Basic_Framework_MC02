@@ -155,11 +155,17 @@ __attribute__((noreturn)) void StartROBOTTASK(void *argument)
 __attribute__((noreturn)) void StartUITASK(void *argument)
 {
     LOGINFO("[freeRTOS] UI Task Start");
-    MyUIInit();
-    LOGINFO("[freeRTOS] UI Init Done, communication with ref has established");
+    if (MyUIInit() != 0U)
+    {
+        LOGINFO("[freeRTOS] UI init done, referee communication established");
+    }
+    else
+    {
+        LOGWARNING("[freeRTOS] UI init pending, waiting referee data in task");
+    }
     for (;;)
     {
-        // 每给裁判系统发送一包数据会挂起一次,详见UITask函数的refereeSend()
+        // UITask内部会泵裁判系统发送队列,并按协议频率限制逐帧启动DMA发送。
         UITask();
         osDelay(1); // 即使没有任何UI需要刷新,也挂起一次,防止卡在UITask中无法切换
     }

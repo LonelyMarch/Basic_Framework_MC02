@@ -90,7 +90,7 @@ typedef enum
 {
 	LEN_game_state = 3,							 // 0x0001
 	LEN_game_result = 1,						 // 0x0002
-	LEN_game_robot_HP = 2,						 // 0x0003
+	LEN_game_robot_HP = 32,						 // 0x0003
 	LEN_event_data = 4,							 // 0x0101
 	LEN_supply_projectile_action = 4,			 // 0x0102
 	LEN_game_robot_state = 27,					 // 0x0201

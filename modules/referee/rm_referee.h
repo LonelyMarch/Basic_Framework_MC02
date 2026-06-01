@@ -9,7 +9,6 @@
 
 extern uint8_t UI_Seq;
 
-#pragma pack(1)
 typedef struct
 {
 	uint8_t Robot_Color;		// 机器人颜色
@@ -78,8 +77,6 @@ typedef struct
 
 } Referee_Interactive_info_t;
 
-#pragma pack()
-
 /**
  * @brief 裁判系统通信初始化,该函数会初始化裁判系统串口,开启中断
  *
@@ -89,12 +86,33 @@ typedef struct
 referee_info_t *RefereeInit(UART_HandleTypeDef *referee_usart_handle);
 
 /**
+ * @brief 获取裁判系统数据快照
+ *
+ * @note USART解析任务会更新内部数据,其他任务读取时建议使用该接口复制快照,
+ *       避免直接读取内部结构体时遇到任务切换造成的半更新数据。
+ *
+ * @param snapshot 快照输出地址
+ * @return uint8_t 1表示复制成功,0表示参数非法
+ */
+uint8_t RefereeGet(referee_info_t *snapshot);
+
+/**
  * @brief UI绘制和交互数的发送接口,由UI绘制任务和多机通信函数调用
- * @note 内部包含了一个实时系统的延时函数,这是因为裁判系统接收CMD数据至高位10Hz
+ * @note 该接口只把交互帧放入裁判系统内部发送队列,不会阻塞等待发送节流。
+ *       真正发送由RefereeTxProcess()在UI任务中按裁判系统频率限制逐帧处理。
  *
  * @param send 发送数据首地址
  * @param tx_len 发送长度
+ * @return HAL_StatusTypeDef HAL_OK表示成功入队,HAL_BUSY表示发送队列已满
  */
-void RefereeSend(uint8_t *send, uint16_t tx_len);
+HAL_StatusTypeDef RefereeSend(uint8_t *send, uint16_t tx_len);
+
+/**
+ * @brief 处理裁判系统发送队列
+ *
+ * @note 该函数需要在任务上下文周期调用。它会在USART空闲且满足裁判系统
+ *       交互数据上行频率限制时,启动下一帧DMA发送。
+ */
+void RefereeTxProcess(void);
 
 #endif // !REFEREE_H
