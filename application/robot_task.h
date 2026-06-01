@@ -120,8 +120,11 @@ __attribute__((noreturn)) void StartDAEMONTASK(void *argument)
 {
     static float daemon_dt;
     static float daemon_start;
+    uint32_t wake_tick;
+
     BuzzerInit();
     LOGINFO("[freeRTOS] Daemon Task Start");
+    wake_tick = osKernelGetTickCount();
     for (;;)
     {
         // 100Hz
@@ -129,9 +132,19 @@ __attribute__((noreturn)) void StartDAEMONTASK(void *argument)
         DaemonTask();
         BuzzerTask();
         daemon_dt = DWT_GetTimeline_ms() - daemon_start;
-        if (daemon_dt > 10)
+        if (daemon_dt > DAEMON_TASK_PERIOD_MS)
             LOGERROR("[freeRTOS] Daemon Task is being DELAY! dt = [%d] us", (int)(daemon_dt * 1000.0f));
-        osDelay(10);
+
+        wake_tick += DAEMON_TASK_PERIOD_MS;
+        if ((int32_t)(wake_tick - osKernelGetTickCount()) <= 0)
+        {
+            /*
+             * 如果本任务因为高优先级任务或系统繁忙而错过了计划唤醒点,
+             * 则从当前tick重新规划下一周期,避免连续补跑多轮DaemonTask/BuzzerTask。
+             */
+            wake_tick = osKernelGetTickCount() + DAEMON_TASK_PERIOD_MS;
+        }
+        osDelayUntil(wake_tick);
     }
 }
 

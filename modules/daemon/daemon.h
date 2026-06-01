@@ -5,6 +5,10 @@
 #include "string.h"
 
 #define DAEMON_MX_CNT 64
+#define DAEMON_TASK_PERIOD_MS 10U      // DaemonTask调度周期,application层需按该周期调用DaemonTask()
+#define DAEMON_DEFAULT_TIMEOUT_MS 1000U // 未配置reload_count时的默认超时时间
+#define DAEMON_DEFAULT_COUNT \
+    ((DAEMON_DEFAULT_TIMEOUT_MS + DAEMON_TASK_PERIOD_MS - 1U) / DAEMON_TASK_PERIOD_MS)
 
 /* 模块离线处理函数指针 */
 typedef void (*offline_callback)(void *);
@@ -31,6 +35,10 @@ typedef struct
 
 /**
  * @brief 注册一个daemon实例
+ * @note 离线callback由DaemonTask()在daemon任务上下文执行,不是中断上下文。
+ *       callback应保持短小,只做状态标记、一次性日志或轻量恢复;
+ *       不建议在callback中长时间阻塞、忙等或循环重试。
+ *       需要周期性重连的模块应在自身任务中根据DaemonIsOnline()做节流恢复。
  *
  * @param config 初始化配置
  * @return DaemonInstance* 返回实例指针
