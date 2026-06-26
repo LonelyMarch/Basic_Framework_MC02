@@ -1,180 +1,385 @@
 # message_center
 
-<p align='right'>neozng1@hnu.edu.cn</p>
+`message_center` 是 APP 层之间交换固定长度结构体消息的轻量发布-订阅模块。它的目标是让
+`robot_cmd`、`gimbal`、`chassis`、`shoot` 等应用保持平行关系：应用之间不互相包含头文件，也不直接调用彼此函数，而是通过约定好的 topic 传递命令和反馈。
 
-> TODO:
->
-> 支持自定义队列长度，使得订阅者可以自行确定需要的队列长度，适应不同的需求
+当前版本已经重构为：
 
-## 总览和封装说明
+- 编译期枚举 topic ID。
+- Flash/只读区 topic 调试名表。
+- 静态 topic 表。
+- 静态 subscriber 池。
+- 每个订阅者一个 FreeRTOS 静态 Queue。
+- 不使用 `malloc()`。
+- 运行期不修改注册表。
+- Queue 满时丢弃最旧消息，保留最新消息。
+- 运行期热路径不输出日志，只用返回值表示失败。
 
-**重要定义：**
+## 适用场景
 
-- 发布者：发布消息的对象。发布者会将自己的消息推送给所有订阅了某个特定**话题**的订阅者。
-- 订阅者：获取消息的对象。订阅者在订阅了某个话题之后，可以通过接口获得该话题的消息。
-- 话题（topic）：用于区分消息来源的对象。可以将一个话题看作一刊杂志，不同的发布者会将文章汇集到杂志上，而订阅者选择订阅一种杂志，然后就可以获取所有写在杂志上的文章。
+适合：
 
-Message Center不同应用间进行消息传递的中介，它的存在可以在相当大的程度上解耦不同的app，使得不同的应用之间**不存在包含关系**，让代码的自由度更大，将不同模块之间的关系降为**松耦合**。在以往，如果一个.c文件中的数据需要被其他任务/源文件共享，那么其他模块应该要包含前者的头文件，且头文件中应当存在获取该模块数据的接口（即函数，一般是返回数据指针或直接返回数据，**强烈建议不要使用全局变量**）；但现在，不同的应用之间完全隔离，他们不需要了解彼此的存在，而是只能看见一个**消息中心**以及一些**话题**。
+- 控制命令，例如 `MESSAGE_TOPIC_GIMBAL_CMD`、`MESSAGE_TOPIC_CHASSIS_CMD`、`MESSAGE_TOPIC_SHOOT_CMD`。
+- 周期反馈，例如 `MESSAGE_TOPIC_GIMBAL_FEED`、`MESSAGE_TOPIC_CHASSIS_FEED`、`MESSAGE_TOPIC_SHOOT_FEED`。
+- 小型固定长度结构体。
+- 最新值比历史值更重要的数据。
 
-需要被共享的消息，将会被**发布者**（publisher）发送到消息中心；要获取消息，则由**订阅者**（subscriber）从消息中心根据订阅的话题获取。在这之前，发布者要在消息中心完成**注册**，将自己要发布的消息类型和话题名称提交到消息中心；订阅者同样要先在消息中心完成订阅，将自己要接收的消息类型和话题名称提交到订阅中心。消息中心会根据**话题名称**，把订阅者绑定到发布相同名称的发布者上。
+不适合：
 
-> 为了节省空间，数据结构上采用了链表+循环数组模拟队列的方式。C没有哈希表，因此让发布者保存所有订阅者的地址（实际上只保存首地址，然后通过链表访问所有订阅者）。
+- 大块数据流。
+- 文件传输。
+- 需要可靠重传的协议。
+- 需要在 ISR 中直接发布或读取的数据。
+- 0 字节空消息。即使暂时没有反馈字段，也应放置一个 `uint8_t reserved`。
 
-Message Center对外提供了四个接口，所有原本要进行信息交互的应用都应该包含`message_center.h`，并在初始化的时候进行注册。
+## 核心概念
 
-## 代码结构
+**topic ID**
 
-.h 文件中包含了外部接口和类型定义，.c中包含了各个接口的具体实现。
+topic 在代码中是 `MessageCenterTopic_e` 枚举值，例如 `MESSAGE_TOPIC_GIMBAL_CMD`。枚举 ID 在编译期固定，注册时不再比较字符串，也不会在每个 topic 节点里保存名称。
 
-## 外部接口
+模块内部仍保留一张 `const` 调试名表，例如 `"gimbal_cmd"`。这张表只用于日志和调试查看，不参与发布/读取热路径。
 
-**在代码实现上，话题名实际上就是通过一个字符串体现的。**
+同一个 topic ID 的发布者和订阅者必须使用完全相同的消息长度。
 
-```c
-Subscriber_t* SubRegister(char* name,uint8_t data_len);
+**publisher**
 
-Publisher_t* PubRegister(char* name,uint8_t data_len);
+publisher 是发布者句柄。APP 初始化时调用 `MessageCenterRegisterPublisher()` 注册，运行期调用 `MessageCenterPublish()` 发布消息。
 
-uint8_t SubGetMessage(Subscriber_t* sub,void* data_ptr);
+**subscriber**
 
-void PubPushMessage(Publisher_t* pub,void* data_ptr);
-```
+subscriber 是订阅者句柄。APP 初始化时调用 `MessageCenterRegisterSubscriber()` 注册。每个 subscriber 拥有独立 FreeRTOS Queue，因此多个订阅者订阅同一个 topic 时，彼此不会抢消息。
 
-### 订阅者
+## 初始化流程
 
-订阅者应该保存一个订阅者类型的指针`Subscriber_t*`，在初始化的时候调用`SubRegister()`并传入要订阅的话题名和该话题对应消息的长度，可以直接输入字符串，示例如下，将从event_name订阅float数据：
-
-```c
-Subscriber_t* my_sub;
-my_sub=SubRegister("event_name",sizeof(float));
-```
-
-订阅完毕后，在应用中通过`SubGetMessage()`获取消息，调用时传入订阅时获得的指针，以及要存放数据的指针。在使用的时候，建议使用强制类型转换将`data_ptr` cast成void*类型（好习惯）。
-
-如果消息队列中有消息，返回值为1；否则，返回值为0，说明没有新的消息可用。
-
-### 发布者
-
-发布者应该保存一个发布者类型的指针，在初始化的时候传入要发布的话题名和该话题对应的消息长度。
-
-完成注册后，通过`PubPushMessage()`发布新的消息。所有订阅了该话题的订阅者都会收到新的消息推送。
-
-### 可修改的宏
+推荐初始化顺序如下：
 
 ```c
-#define MAX_EVENT_NAME_LEN  32  //最大的话题名长度,每个话题都由字符串来命名
-#define QUEUE_SIZE 1            //消息队列的长度
-```
-
-修改第一个可以扩大话题名长度，第二个确定消息队列的长度，数量越大可以保存的消息越多。
-
-## 私有函数和定义
-
-```c
-static Publisher_t message_center = {
-    .event_name = "Message_Manager",
-    .first_subs = NULL,
-    .next_event_node = NULL};
-
-static void CheckName(char* name)
+void RobotInit(void)
 {
-    if(strnlen(name,MAX_EVENT_NAME_LEN+1)>=MAX_EVENT_NAME_LEN)
+    __disable_irq();
+
+    BSPInit();
+    MessageCenterInit();
+
+    RobotCMDInit();
+    GimbalInit();
+    ShootInit();
+    ChassisInit();
+
+    MessageCenterLockRegistration();
+
+    __enable_irq();
+}
+```
+
+`MessageCenterInit()` 清空内部静态池。工程必须在任何发布者/订阅者注册之前显式调用它；如果忘记调用，注册接口会拒绝注册并返回 `NULL`。
+
+各 APP 的 `Init()` 函数中注册发布者和订阅者。
+
+`MessageCenterLockRegistration()` 锁定注册阶段。锁定后不能继续注册 topic 或 subscriber，只能发布和读取消息。
+
+这样做的好处是运行期不会再修改 topic 表和订阅者链表，并发复杂度只集中在 FreeRTOS Queue 收发路径上。
+
+## 资源上限
+
+资源上限定义在 `message_center.h`：
+
+```c
+#define MESSAGE_CENTER_MAX_SUBSCRIBER_COUNT 24U
+#define MESSAGE_CENTER_MAX_MESSAGE_BYTES 128U
+#define MESSAGE_CENTER_MAX_QUEUE_DEPTH 4U
+#define MESSAGE_CENTER_DEFAULT_QUEUE_DEPTH 1U
+
+typedef enum
+{
+    MESSAGE_TOPIC_GIMBAL_CMD = 0,
+    MESSAGE_TOPIC_GIMBAL_FEED,
+    MESSAGE_TOPIC_SHOOT_CMD,
+    MESSAGE_TOPIC_SHOOT_FEED,
+    MESSAGE_TOPIC_CHASSIS_CMD,
+    MESSAGE_TOPIC_CHASSIS_FEED,
+    MESSAGE_TOPIC_COUNT,
+} MessageCenterTopic_e;
+```
+
+含义：
+
+- `MESSAGE_CENTER_MAX_SUBSCRIBER_COUNT`：最多支持多少个订阅者。
+- `MESSAGE_CENTER_MAX_MESSAGE_BYTES`：单条消息最大字节数。
+- `MESSAGE_CENTER_MAX_QUEUE_DEPTH`：单个订阅者 Queue 的最大深度。
+- `MESSAGE_CENTER_DEFAULT_QUEUE_DEPTH`：传入 `0` 或默认使用时的 Queue 深度。
+- `MESSAGE_TOPIC_COUNT`：topic 数量，必须放在枚举末尾。
+
+新增 topic 时，需要同时修改：
+
+1. `MessageCenterTopic_e` 枚举。
+2. `message_center.c` 中的 `topic_debug_names[]` 调试名表。
+
+当前控制类消息推荐使用深度 1。深度 1 表示“最新帧邮箱”：如果发布者连续发布多次而订阅者还没读取，订阅者最终只保留最新一帧。
+
+为了保持 1kHz 控制路径足够轻，深度 1 的覆盖路径不会额外调用 `uxQueueMessagesWaiting()` 统计覆盖次数。`MessageCenterDroppedCount()` 主要用于深度大于 1 的 Queue 满丢弃统计。
+
+## 对外接口
+
+### MessageCenterInit
+
+```c
+void MessageCenterInit(void);
+```
+
+初始化消息中心，清空静态 topic 池和 subscriber 池。
+
+应在所有 APP 注册发布者和订阅者之前调用。
+
+### MessageCenterLockRegistration
+
+```c
+void MessageCenterLockRegistration(void);
+```
+
+锁定注册阶段。锁定之后，`MessageCenterRegisterPublisher()` 和
+`MessageCenterRegisterSubscriber()` 会拒绝继续注册。
+
+### MessageCenterTopicName
+
+```c
+const char* MessageCenterTopicName(MessageCenterTopic_e topic_id);
+```
+
+获取 topic 的调试名称。合法 topic 返回 Flash/只读区中的调试名，非法 topic 返回 `"invalid_topic"`。
+
+该接口只用于日志和调试，不参与消息发布/读取热路径。
+
+### MessageCenterRegisterPublisher
+
+```c
+MessageCenterPublisher_t* MessageCenterRegisterPublisher(MessageCenterTopic_e topic_id,
+                                                         size_t data_len);
+```
+
+注册 topic 发布者。
+
+参数：
+
+- `topic_id`：topic 枚举 ID。
+- `data_len`：消息结构体长度，通常使用 `sizeof(MessageType)`，必须大于 0。
+
+返回值：
+
+- 成功：发布者句柄。
+- 失败：`NULL`。
+
+失败原因通常包括：
+
+- topic ID 非法。
+- 消息长度为 0。
+- 消息长度超过 `MESSAGE_CENTER_MAX_MESSAGE_BYTES`。
+- 同一 topic 已存在但消息长度不一致。
+- 注册阶段已经被锁定。
+
+### MessageCenterRegisterSubscriber
+
+```c
+MessageCenterSubscriber_t* MessageCenterRegisterSubscriber(MessageCenterTopic_e topic_id,
+                                                           size_t data_len,
+                                                           uint8_t queue_depth);
+```
+
+注册 topic 订阅者。
+
+参数：
+
+- `topic_id`：topic 枚举 ID。
+- `data_len`：消息结构体长度，必须大于 0，且必须与同一 topic ID 一致。
+- `queue_depth`：该订阅者 Queue 深度。传 `0` 时使用默认深度。
+
+返回值：
+
+- 成功：订阅者句柄。
+- 失败：`NULL`。
+
+订阅者允许早于发布者注册。订阅者先注册时会先创建 topic 节点，发布者后续注册同一 topic ID 时会绑定到同一个 topic 节点。
+
+### MessageCenterPublish
+
+```c
+uint8_t MessageCenterPublish(MessageCenterPublisher_t* publisher,
+                             const void* data);
+```
+
+向 topic 发布一条消息。
+
+参数：
+
+- `publisher`：发布者句柄。
+- `data`：待发布的消息地址，必须为非空指针。
+
+返回值：
+
+- 成功写入的订阅者 Queue 数量。
+- `0` 表示没有订阅者，或参数/调用上下文非法。
+
+队列满时的策略：
+
+- Queue 深度为 1：使用 `xQueueOverwrite()`，直接覆盖旧消息。
+- Queue 深度大于 1：先尝试入队；若满，则丢弃最旧消息，再写入最新消息。
+
+发布接口运行期不打印日志。参数非法、ISR误调用或无订阅者时只返回 `0`，避免高频控制路径被格式化日志打扰。
+
+### MessageCenterFetch
+
+```c
+uint8_t MessageCenterFetch(MessageCenterSubscriber_t* subscriber,
+                           void* data);
+```
+
+从订阅者 Queue 读取一条消息。
+
+参数：
+
+- `subscriber`：订阅者句柄。
+- `data`：接收消息的缓冲区，必须为非空指针。
+
+返回值：
+
+- `1`：读取到新消息。
+- `0`：没有新消息，或参数/调用上下文非法。
+
+### MessageCenterPendingCount
+
+```c
+uint8_t MessageCenterPendingCount(const MessageCenterSubscriber_t* subscriber);
+```
+
+返回订阅者 Queue 中等待读取的消息数量。
+
+### MessageCenterDroppedCount
+
+```c
+uint32_t MessageCenterDroppedCount(const MessageCenterSubscriber_t* subscriber);
+```
+
+返回该订阅者由于 Queue 满而丢弃旧消息的次数。该计数主要用于调试观察。
+
+注意：默认深度 1 使用 `xQueueOverwrite()` 保留最新帧，为了减少热路径开销，不统计每次覆盖旧消息的次数。
+
+## 使用示例
+
+假设有如下消息结构体：
+
+```c
+typedef struct
+{
+    float yaw;
+    float pitch;
+} GimbalCmd_t;
+```
+
+发布者：
+
+```c
+static MessageCenterPublisher_t* gimbal_cmd_pub;
+static GimbalCmd_t gimbal_cmd;
+
+void RobotCMDInit(void)
+{
+    gimbal_cmd_pub = MessageCenterRegisterPublisher(MESSAGE_TOPIC_GIMBAL_CMD,
+                                                    sizeof(GimbalCmd_t));
+}
+
+void RobotCMDTask(void)
+{
+    gimbal_cmd.yaw = 10.0f;
+    gimbal_cmd.pitch = 2.0f;
+    (void)MessageCenterPublish(gimbal_cmd_pub, &gimbal_cmd);
+}
+```
+
+订阅者：
+
+```c
+static MessageCenterSubscriber_t* gimbal_cmd_sub;
+static GimbalCmd_t gimbal_cmd_recv;
+
+void GimbalInit(void)
+{
+    gimbal_cmd_sub = MessageCenterRegisterSubscriber(MESSAGE_TOPIC_GIMBAL_CMD,
+                                                     sizeof(GimbalCmd_t),
+                                                     MESSAGE_CENTER_DEFAULT_QUEUE_DEPTH);
+}
+
+void GimbalTask(void)
+{
+    if (MessageCenterFetch(gimbal_cmd_sub, &gimbal_cmd_recv) != 0U)
     {
-        while (1); // 进入这里说明话题名超出长度限制
+        // 收到新命令后更新控制目标
     }
 }
 ```
 
-`message_center`内部保存了指向第一个发布者的指针，可以看作整个消息中心的抽象。通过这个变量，可以访问所有发布者和订阅者。它将会在各个函数中作为dumb_head（哑结点）以简化逻辑，这样不需要对链表头进行特殊处理。
+## 当前工程中的 topic
 
-`CheckName()`在发布者/订阅者注册的时候被调用，用于检查话题名是否超过长度限制。超长后会进入死循环，方便开发者检查。
+单板模式下，当前主要 topic 如下：
 
-> 四个外部接口的实现都有详细的注释，有兴趣的同学可以自行阅读。下方也提供了流程图。
+| topic ID | 调试名 | 发布者 | 订阅者 | 消息类型 |
+| --- | --- | --- | --- | --- |
+| `MESSAGE_TOPIC_GIMBAL_CMD` | `gimbal_cmd` | `robot_cmd` | `gimbal` | `Gimbal_Ctrl_Cmd_s` |
+| `MESSAGE_TOPIC_GIMBAL_FEED` | `gimbal_feed` | `gimbal` | `robot_cmd` | `Gimbal_Upload_Data_s` |
+| `MESSAGE_TOPIC_SHOOT_CMD` | `shoot_cmd` | `robot_cmd` | `shoot` | `Shoot_Ctrl_Cmd_s` |
+| `MESSAGE_TOPIC_SHOOT_FEED` | `shoot_feed` | `shoot` | `robot_cmd` | `Shoot_Upload_Data_s` |
+| `MESSAGE_TOPIC_CHASSIS_CMD` | `chassis_cmd` | `robot_cmd` | `chassis` | `Chassis_Ctrl_Cmd_s` |
+| `MESSAGE_TOPIC_CHASSIS_FEED` | `chassis_feed` | `chassis` | `robot_cmd` | `Chassis_Upload_Data_s` |
 
-## 注册、发布、获取消息流程
+双板模式下，`robot_cmd` 和 `chassis` 之间的底盘命令/反馈会改用 `can_comm` 跨板传输。
 
-包含一个结构图和四个流程图。
+## FreeRTOS 和中断约束
 
-### Message Center的结构![image-20221201150945052](../../.assets/image-20221201150945052.png)
+`message_center` 使用 FreeRTOS 静态 Queue，Queue 的收发接口本身支持任务间并发访问。
 
-<center>建议打开原图查看</center>
+模块不提供 ISR 版本接口。`MessageCenterPublish()` 和 `MessageCenterFetch()` 会拒绝 ISR 中调用。
 
-**多个publisher可以绑定同一个话题，往该话题推送消息。但一个subscriber只能订阅一个话题，如果应用需要订阅多个话题，则要创建对应数量的订阅者。**
+如果中断中产生了某类事件，应遵循当前 BSP 层约定：
 
-> 对于电控程序目前的情况，不存在多个publisher向同一个话题推送消息的情况。
+1. ISR 中只保存必要数据或投递延后事件。
+2. 在任务上下文中解析数据。
+3. 再调用 `MessageCenterPublish()` 发布给 APP。
 
-**对于相同话题，其消息长度必须相同**。发布者和订阅者在注册时都会传入消息长度，用`sizof(your_data)`获取。应当保证不同的模块在进行交互式，使用相同的数据长度。
+## 设计取舍
 
-### 发布者和订阅者注册的流程
+为什么不使用 `malloc()`：
 
-- **发布者：**
+- 避免 newlib heap 与 FreeRTOS heap 混用。
+- 避免堆碎片。
+- 启动后资源占用完全可预测。
 
-  遍历发布者的话题结点，如果发现相同的话题，直接返回指针即可；遍历完成后发现尚未创建则创建新的话题。
+为什么使用枚举 topic ID：
 
-<img src="../../.assets/image-20221201152530558.png" alt="image-20221201152530558" style="zoom: 80%;" />
+- 不在每个 topic 节点中保存字符串，节省 RAM。
+- 注册阶段按 ID 直接索引 topic 表，不再 `strcmp()`。
+- 编译器能检查枚举名，减少字符串拼写错误导致的隐性 bug。
+- 调试名表放在 `const` 只读区，需要日志时仍能看到可读名称。
 
-- **订阅者：**
+为什么每个 subscriber 一个 Queue：
 
-  需要注意，由于不同应用/模块的初始化顺序不同，可能出现订阅者先于发布者订阅某一消息的情况，所以要进行发布者链表的遍历，判断是否已经存在相同话题名的发布者，不存在则要先创建发布者结点再将新建订阅者结点并挂载到前者上。
+- 多个订阅者订阅同一个 topic 时，互不影响。
+- 一个订阅者读取消息不会让另一个订阅者丢消息。
+- FreeRTOS Queue 负责收发同步，减少手写并发保护。
 
-<img src="../../.assets/image-20221201152904044.png" alt="image-20221201152904044" style="zoom:80%;" />
+为什么 Queue 满时丢最旧消息：
 
-### 推送/获取消息的流程
+- 控制命令和周期反馈通常只关心最新值。
+- 旧命令滞留可能比丢弃更危险。
+- 该策略能保证慢订阅者恢复读取时拿到较新的状态。
 
-- **数组+头尾索引模拟队列**
+## 维护建议
 
-<img src="../../.assets/image-20221201155228196.png" alt="image-20221201155228196" style="zoom: 71%;" />
-
-front指向队列头，即最早入队的数据；back指向队列尾，即最新的数据。队列是first in first out（FIFO，先进先出）的结构。back指向的位置是入队数据被写入的位置，front指向的是读取时会出队的位置。当有数据入队，back++；出队则front++。若碰到数组边界，则返回数组头，可以通过取模实现：
-
-```C
-idx=(idx+1)%SIZE_OF_ARRAY; //SIZE_OF_ARRAY是数组大小
-```
-
-我们还需要一个变量用于保存当前队列的元素个数，如果在写入时，队列长度等于上限，应该先将最老的数据出队，再写入新的数据，即：
-
-```c
-back=(back+1)%SIZE_OF_ARRAY;
-size--;
-queue[front]=new_data;
-front=(front+1)%SIZE_OF_ARRAY;
-```
-
-- **发布者推送消息到指定话题**
-
-通过发布者指针，将订阅了该话题的所有订阅者遍历，将新数据入队。
-
-- **订阅者获取消息**
-
-从订阅者指针访问消息队列，取出最先进入队列的数据。注意判断队列是否为空，如果为空则返回0。
-
-## 示例代码
-
-```c
-typedef struct 
-{
-    float a;
-    uint8_t b;
-    uint32_t c;
-}good;
-
-good g1;
-good g2;
-good pub_data={.a=1,.b=2,.c=3};
-// 一个发布者,两个订阅者
-Subscriber_t* s=SubRegister("test",sizeof(good));
-Subscriber_t* ss=SubRegister("test",sizeof(good));
-Publisher_t* p=PubRegister("test",sizeof(good));
-// 推送消息
-PubPushMessage(p,&pub_data);
-pub_data.a=4;
-pub_data.b=5;
-pub_data.c=6;
-// 推送新消息
-PubPushMessage(p,&pub_data);
-volatile uint8_t d= 0; // 确定收到的消息是否有效,可以根据d的值进一步处理
-d=SubGetMessage(s,&g1);
-d=SubGetMessage(s,&g1);
-d=SubGetMessage(s,&g1); // 此时d等于0
-d=SubGetMessage(ss,&g2);
-```
+- 新增 topic 时，消息结构体应放在 `application/robot_def.h` 或对应公共头文件中。
+- 新增 topic 时，必须同时更新 `MessageCenterTopic_e` 和 `topic_debug_names[]`。
+- 发布者和订阅者必须使用同一个消息类型的 `sizeof()`。
+- 消息结构体不能是 0 字节；暂无字段时使用 `uint8_t reserved;` 占位。
+- 控制类 topic 优先使用 `MESSAGE_CENTER_DEFAULT_QUEUE_DEPTH`。
+- 只有确实需要保留短历史时，才提高 `queue_depth`。
+- 若消息结构体超过 `MESSAGE_CENTER_MAX_MESSAGE_BYTES`，应优先重新设计消息，而不是直接扩大上限。
+- 不要在 ISR 中调用发布/读取接口。
+- 不要在 `MessageCenterLockRegistration()` 之后注册新的发布者或订阅者。
