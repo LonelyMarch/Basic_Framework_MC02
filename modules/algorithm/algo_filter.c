@@ -20,7 +20,7 @@ static float FilterClamp01(float value)
     return value;
 }
 
-void ExpAverageFilterInit(ExpAverageFilter_t *filter, float alpha)
+void ExpAverageFilterInit(ExpAverageFilter_t* filter, float alpha)
 {
     if (filter == NULL)
     {
@@ -32,7 +32,7 @@ void ExpAverageFilterInit(ExpAverageFilter_t *filter, float alpha)
     filter->inited = 0U;
 }
 
-float ExpAverageFilterUpdate(ExpAverageFilter_t *filter, float input)
+float ExpAverageFilterUpdate(ExpAverageFilter_t* filter, float input)
 {
     if (filter == NULL)
     {
@@ -50,7 +50,7 @@ float ExpAverageFilterUpdate(ExpAverageFilter_t *filter, float input)
     return filter->value;
 }
 
-void ExpAverageFilterReset(ExpAverageFilter_t *filter, float value)
+void ExpAverageFilterReset(ExpAverageFilter_t* filter, float value)
 {
     if (filter == NULL)
     {
@@ -61,7 +61,7 @@ void ExpAverageFilterReset(ExpAverageFilter_t *filter, float value)
     filter->inited = 1U;
 }
 
-void LowPassFilterInit(LowPassFilter_t *filter, float rc, float dt)
+void LowPassFilterInit(LowPassFilter_t* filter, float rc, float dt)
 {
     if (filter == NULL)
     {
@@ -84,7 +84,7 @@ void LowPassFilterInit(LowPassFilter_t *filter, float rc, float dt)
     filter->inited = 0U;
 }
 
-void LowPassFilterInitByAlpha(LowPassFilter_t *filter, float alpha)
+void LowPassFilterInitByAlpha(LowPassFilter_t* filter, float alpha)
 {
     if (filter == NULL)
     {
@@ -96,7 +96,7 @@ void LowPassFilterInitByAlpha(LowPassFilter_t *filter, float alpha)
     filter->inited = 0U;
 }
 
-float LowPassFilterUpdate(LowPassFilter_t *filter, float input)
+float LowPassFilterUpdate(LowPassFilter_t* filter, float input)
 {
     if (filter == NULL)
     {
@@ -114,7 +114,7 @@ float LowPassFilterUpdate(LowPassFilter_t *filter, float input)
     return filter->value;
 }
 
-void LowPassFilterReset(LowPassFilter_t *filter, float value)
+void LowPassFilterReset(LowPassFilter_t* filter, float value)
 {
     if (filter == NULL)
     {
@@ -125,7 +125,7 @@ void LowPassFilterReset(LowPassFilter_t *filter, float value)
     filter->inited = 1U;
 }
 
-void WindowAverageFilterInit(WindowAverageFilter_t *filter, float *buffer, uint16_t size)
+void WindowAverageFilterInit(WindowAverageFilter_t* filter, float* buffer, uint16_t size)
 {
     if (filter == NULL)
     {
@@ -143,7 +143,7 @@ void WindowAverageFilterInit(WindowAverageFilter_t *filter, float *buffer, uint1
     }
 }
 
-float WindowAverageFilterUpdate(WindowAverageFilter_t *filter, float input)
+float WindowAverageFilterUpdate(WindowAverageFilter_t* filter, float input)
 {
     if (filter == NULL || filter->buffer == NULL || filter->size == 0U)
     {
@@ -172,7 +172,7 @@ float WindowAverageFilterUpdate(WindowAverageFilter_t *filter, float input)
     return filter->sum / (float)filter->count;
 }
 
-void WindowAverageFilterReset(WindowAverageFilter_t *filter, float value)
+void WindowAverageFilterReset(WindowAverageFilter_t* filter, float value)
 {
     if (filter == NULL || filter->buffer == NULL || filter->size == 0U)
     {

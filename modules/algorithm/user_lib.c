@@ -15,14 +15,14 @@
 #include <string.h>
 #include "main.h"
 
-void *zmalloc(size_t size)
+void* zmalloc(size_t size)
 {
     if (size == 0U)
     {
         return NULL;
     }
 
-    void *ptr = user_malloc(size);
+    void* ptr = user_malloc(size);
     if (ptr == NULL)
     {
         return NULL;
@@ -150,7 +150,7 @@ int float_rounding(float raw)
 }
 
 // 三维向量归一化
-float *Norm3d(float *v)
+float* Norm3d(float* v)
 {
     if (v == NULL)
     {
@@ -171,7 +171,7 @@ float *Norm3d(float *v)
 }
 
 // 计算模长
-float NormOf3d(float *v)
+float NormOf3d(float* v)
 {
     if (v == NULL)
     {
@@ -182,7 +182,7 @@ float NormOf3d(float *v)
 }
 
 // 三维向量叉乘v1 x v2
-void Cross3d(float *v1, float *v2, float *res)
+void Cross3d(float* v1, float* v2, float* res)
 {
     if (v1 == NULL || v2 == NULL || res == NULL)
     {
@@ -195,7 +195,7 @@ void Cross3d(float *v1, float *v2, float *res)
 }
 
 // 三维向量点乘
-float Dot3d(float *v1, float *v2)
+float Dot3d(float* v1, float* v2)
 {
     if (v1 == NULL || v2 == NULL)
     {
@@ -206,7 +206,7 @@ float Dot3d(float *v1, float *v2)
 }
 
 // 均值滤波,删除buffer中的最后一个元素,填入新的元素并求平均值
-float AverageFilter(float new_data, float *buf, uint8_t len)
+float AverageFilter(float new_data, float* buf, uint8_t len)
 {
     if (buf == NULL || len == 0U)
     {
@@ -230,17 +230,17 @@ float AverageFilter(float new_data, float *buf, uint8_t len)
     return sum / len;
 }
 
-void MatInit(mat *m, uint8_t row, uint8_t col)
+void MatInit(mat* m, uint8_t row, uint8_t col)
 {
     if (m == NULL)
     {
         return;
     }
 
-    float *data = NULL;
+    float* data = NULL;
     if (row != 0U && col != 0U)
     {
-        data = (float *)zmalloc((size_t)row * (size_t)col * sizeof(float));
+        data = (float*)zmalloc((size_t)row * (size_t)col * sizeof(float));
     }
 
     arm_mat_init_f32(m, row, col, data);

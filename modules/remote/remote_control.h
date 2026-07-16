@@ -82,6 +82,7 @@ typedef union
         uint16_t v : 1;
         uint16_t b : 1;
     };
+
     uint16_t keys; // 用于memcpy而不需要进行强制类型转换
 } Key_t;
 
@@ -94,11 +95,12 @@ typedef struct
         int16_t rocker_l1; // 左竖直
         int16_t rocker_r_; // 右水平
         int16_t rocker_r1; // 右竖直
-        int16_t dial;      // 侧边拨轮
+        int16_t dial; // 侧边拨轮
 
-        uint8_t switch_left;  // 左侧开关
+        uint8_t switch_left; // 左侧开关
         uint8_t switch_right; // 右侧开关
     } rc;
+
     struct
     {
         int16_t x;
@@ -120,7 +122,7 @@ typedef struct
  * @attention 注意分配正确的串口硬件,当前达妙MC02工程中遥控器使用UART5。
  *
  */
-RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
+RC_ctrl_t* RemoteControlInit(UART_HandleTypeDef * rc_usart_handle);
 
 /**
  * @brief 获取遥控器数据快照
@@ -131,7 +133,8 @@ RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
  * @param rc_snapshot 输出快照数组
  * @return uint8_t 1:获取成功 0:尚未初始化或参数非法
  */
-uint8_t RemoteControlGet(RC_ctrl_t *rc_snapshot);
+uint8_t RemoteControlGet(RC_ctrl_t* rc_snapshot);
+
 
 /**
  * @brief 检查遥控器是否在线,若尚未初始化也视为离线

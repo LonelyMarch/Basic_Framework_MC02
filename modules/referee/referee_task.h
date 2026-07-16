@@ -8,13 +8,14 @@
  * @brief 初始化裁判系统交互任务(UI和多机通信)
  *
  */
-referee_info_t *UITaskInit(UART_HandleTypeDef *referee_usart_handle, Referee_Interactive_info_t *UI_data);
+referee_info_t* UITaskInit(UART_HandleTypeDef * referee_usart_handle, Referee_Interactive_info_t * UI_data);
 
 /**
  * @brief 在referee task之前调用,添加在freertos.c中
- * 
+ *
  */
 uint8_t MyUIInit(void);
+
 
 /**
  * @brief 裁判系统交互任务(UI和多机通信)

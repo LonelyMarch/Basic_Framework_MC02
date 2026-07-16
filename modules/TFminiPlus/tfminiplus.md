@@ -1,6 +1,7 @@
 # TFmini Plus
 
-`modules/TFminiPlus` 是北醒 TFmini Plus 单点激光雷达的模块层封装。模块通过 `bsp/iic` 访问传感器,负责注册 I2C 从设备、发送测距命令、读取并校验数据帧,再向上层提供最近一次有效距离和信号强度。
+`modules/TFminiPlus` 是北醒 TFmini Plus 单点激光雷达的模块层封装。模块通过 `bsp/iic` 访问传感器,负责注册 I2C
+从设备、发送测距命令、读取并校验数据帧,再向上层提供最近一次有效距离和信号强度。
 
 当前目录尚未加入主工程 `CMakeLists.txt`,需要实际使用时再接入构建和上层任务。
 

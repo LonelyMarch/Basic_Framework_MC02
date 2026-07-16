@@ -46,7 +46,7 @@ CANInstance *CANRegister(CAN_Init_Config_s *config);
  * @brief CAN接收处理任务
  *
  * @note FDCAN中断只负责把报文复制到BSP内部队列,真正的模块回调由本任务执行。
- *       当前工程在application/robot_task.h中创建该任务。
+ *       当前工程由 BSPTaskInit() 创建该任务，APP 不直接调用任务入口。
  */
 void CANProcessTask(void *argument);
 
@@ -59,8 +59,12 @@ void CANProcessTask(void *argument);
 void CANSetDLC(CANInstance *_instance, uint8_t length);
 
 /**
- * @brief transmit mesg through CAN device,通过can实例发送消息
- *        发送前需要向CAN实例的tx_buff写入发送数据
+ * @brief 提交一帧消息到 FDCAN 硬件 TX FIFO。
+ *        发送前需要向 CANInstance 的 tx_buff 写入完整数据；提交成功后，
+ *        实际总线发送由 FDCAN 硬件异步完成。
+ *
+ * @note tx_buff 由持有该 CANInstance 的模块负责写入，调用期间不得被其他
+ *       上下文同时改写。该函数只保护总线进入 HAL 发送接口的过程。
  * 
  * @attention 超时时间不应该超过调用此函数的任务的周期,否则会导致任务阻塞
  * 

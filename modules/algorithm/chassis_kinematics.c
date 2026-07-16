@@ -11,10 +11,12 @@
 #define KINEMATICS_MIN_DETERMINANT 1.0e-6f
 #define KINEMATICS_MIN_VECTOR_NORM 1.0e-6f
 
+
 static ChassisKinematicsStatus_e Invert3x3(const float a[3][3], float inv[3][3]);
 
-ChassisKinematicsStatus_e OmniKinematicsPrepareConfig(const OmniKinematicsConfig_s *config,
-                                                      OmniKinematicsFastConfig_s *fast_config)
+
+ChassisKinematicsStatus_e OmniKinematicsPrepareConfig(const OmniKinematicsConfig_s* config,
+                                                      OmniKinematicsFastConfig_s* fast_config)
 {
     if (config == NULL || fast_config == NULL || config->wheel_config == NULL)
     {
@@ -33,7 +35,7 @@ ChassisKinematicsStatus_e OmniKinematicsPrepareConfig(const OmniKinematicsConfig
     float normal_matrix[3][3] = {{0.0f}};
     for (uint8_t i = 0; i < config->wheel_num; ++i)
     {
-        const OmniWheelConfig_s *wheel = &config->wheel_config[i];
+        const OmniWheelConfig_s* wheel = &config->wheel_config[i];
         float dir_norm_sq = wheel->drive_dir_x * wheel->drive_dir_x + wheel->drive_dir_y * wheel->drive_dir_y;
         if (dir_norm_sq < KINEMATICS_MIN_VECTOR_NORM)
         {
@@ -72,9 +74,9 @@ ChassisKinematicsStatus_e OmniKinematicsPrepareConfig(const OmniKinematicsConfig
     return CHASSIS_KINEMATICS_OK;
 }
 
-ChassisKinematicsStatus_e OmniKinematicsCalculateWheelSpeed(const OmniKinematicsFastConfig_s *fast_config,
-                                                            const ChassisVelocity_s *chassis_speed,
-                                                            float *wheel_speed)
+ChassisKinematicsStatus_e OmniKinematicsCalculateWheelSpeed(const OmniKinematicsFastConfig_s* fast_config,
+                                                            const ChassisVelocity_s* chassis_speed,
+                                                            float* wheel_speed)
 {
     if (fast_config == NULL || chassis_speed == NULL || wheel_speed == NULL)
     {
@@ -92,17 +94,17 @@ ChassisKinematicsStatus_e OmniKinematicsCalculateWheelSpeed(const OmniKinematics
     for (uint8_t i = 0; i < fast_config->wheel_num; ++i)
     {
         wheel_speed[i] = (fast_config->drive_x[i] * chassis_speed->vx +
-                          fast_config->drive_y[i] * chassis_speed->vy +
-                          fast_config->rotate_coeff[i] * chassis_speed->wz) *
-                         fast_config->wheel_radius_inv;
+                fast_config->drive_y[i] * chassis_speed->vy +
+                fast_config->rotate_coeff[i] * chassis_speed->wz) *
+            fast_config->wheel_radius_inv;
     }
 
     return CHASSIS_KINEMATICS_OK;
 }
 
-ChassisKinematicsStatus_e OmniKinematicsEstimateChassisSpeed(const OmniKinematicsFastConfig_s *fast_config,
-                                                             const float *wheel_speed,
-                                                             ChassisVelocity_s *chassis_speed)
+ChassisKinematicsStatus_e OmniKinematicsEstimateChassisSpeed(const OmniKinematicsFastConfig_s* fast_config,
+                                                             const float* wheel_speed,
+                                                             ChassisVelocity_s* chassis_speed)
 {
     if (fast_config == NULL || wheel_speed == NULL || chassis_speed == NULL)
     {
@@ -131,20 +133,20 @@ ChassisKinematicsStatus_e OmniKinematicsEstimateChassisSpeed(const OmniKinematic
     }
 
     chassis_speed->vx = fast_config->inverse_matrix[0][0] * normal_vector[0] +
-                        fast_config->inverse_matrix[0][1] * normal_vector[1] +
-                        fast_config->inverse_matrix[0][2] * normal_vector[2];
+        fast_config->inverse_matrix[0][1] * normal_vector[1] +
+        fast_config->inverse_matrix[0][2] * normal_vector[2];
     chassis_speed->vy = fast_config->inverse_matrix[1][0] * normal_vector[0] +
-                        fast_config->inverse_matrix[1][1] * normal_vector[1] +
-                        fast_config->inverse_matrix[1][2] * normal_vector[2];
+        fast_config->inverse_matrix[1][1] * normal_vector[1] +
+        fast_config->inverse_matrix[1][2] * normal_vector[2];
     chassis_speed->wz = fast_config->inverse_matrix[2][0] * normal_vector[0] +
-                        fast_config->inverse_matrix[2][1] * normal_vector[1] +
-                        fast_config->inverse_matrix[2][2] * normal_vector[2];
+        fast_config->inverse_matrix[2][1] * normal_vector[1] +
+        fast_config->inverse_matrix[2][2] * normal_vector[2];
 
     return CHASSIS_KINEMATICS_OK;
 }
 
-ChassisKinematicsStatus_e MecanumKinematicsPrepareConfig(const MecanumKinematicsConfig_s *config,
-                                                         MecanumKinematicsFastConfig_s *fast_config)
+ChassisKinematicsStatus_e MecanumKinematicsPrepareConfig(const MecanumKinematicsConfig_s* config,
+                                                         MecanumKinematicsFastConfig_s* fast_config)
 {
     if (config == NULL || fast_config == NULL)
     {
@@ -162,9 +164,9 @@ ChassisKinematicsStatus_e MecanumKinematicsPrepareConfig(const MecanumKinematics
     return CHASSIS_KINEMATICS_OK;
 }
 
-ChassisKinematicsStatus_e MecanumKinematicsCalculateWheelSpeed(const MecanumKinematicsFastConfig_s *fast_config,
-                                                               const ChassisVelocity_s *chassis_speed,
-                                                               MecanumWheelSpeed_s *wheel_speed)
+ChassisKinematicsStatus_e MecanumKinematicsCalculateWheelSpeed(const MecanumKinematicsFastConfig_s* fast_config,
+                                                               const ChassisVelocity_s* chassis_speed,
+                                                               MecanumWheelSpeed_s* wheel_speed)
 {
     if (fast_config == NULL || chassis_speed == NULL || wheel_speed == NULL)
     {
@@ -188,9 +190,9 @@ ChassisKinematicsStatus_e MecanumKinematicsCalculateWheelSpeed(const MecanumKine
     return CHASSIS_KINEMATICS_OK;
 }
 
-ChassisKinematicsStatus_e MecanumKinematicsEstimateChassisSpeed(const MecanumKinematicsFastConfig_s *fast_config,
-                                                                const MecanumWheelSpeed_s *wheel_speed,
-                                                                ChassisVelocity_s *chassis_speed)
+ChassisKinematicsStatus_e MecanumKinematicsEstimateChassisSpeed(const MecanumKinematicsFastConfig_s* fast_config,
+                                                                const MecanumWheelSpeed_s* wheel_speed,
+                                                                ChassisVelocity_s* chassis_speed)
 {
     if (fast_config == NULL || wheel_speed == NULL || chassis_speed == NULL)
     {

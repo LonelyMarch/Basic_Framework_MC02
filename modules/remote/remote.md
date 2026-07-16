@@ -10,7 +10,7 @@
 RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
 ```
 
-初始化遥控器模块,并把指定 UART 注册到 `bsp_usart`。当前工程在 `RobotCMDInit()` 中使用:
+初始化遥控器模块，并把指定 UART 注册到 `bsp_usart`。当前 APP 尚未注册遥控器；后续迁入时可在 `RobotCMDInit()` 中使用：
 
 ```c
 RemoteControlInit(&huart5);
@@ -46,7 +46,8 @@ uint8_t RemoteControlGet(RC_ctrl_t *rc_snapshot);
 - `rc_snapshot[RC_TEMP]`: 当前帧数据。
 - `rc_snapshot[RC_LAST]`: 上一帧数据。
 
-上层任务应通过 `RemoteControlGet()` 读取遥控器数据,不要直接访问模块内部静态变量。该接口内部使用短临界区复制快照,避免 `BSPServiceTask` 更新数据时上层读到半更新状态。
+上层任务应通过 `RemoteControlGet()` 读取遥控器数据,不要直接访问模块内部静态变量。该接口内部使用短临界区复制快照,避免
+`BSPServiceTask` 更新数据时上层读到半更新状态。
 
 ## 在线状态
 
@@ -59,7 +60,8 @@ uint8_t RemoteControlIsOnline(void);
 - 返回 `1`: 已初始化,收到过合法 DBUS 帧,且 `daemon` 未超时。
 - 返回 `0`: 未初始化、尚未收到合法帧或 `daemon` 判定离线。
 
-遥控器离线时,模块会清空内部快照并只打印一次离线日志。若离线回调和新合法帧刚好交错,代码会检测 `daemon` 是否已经被重新喂狗,避免误清空刚更新的数据。
+遥控器离线时,模块会清空内部快照并只打印一次离线日志。若离线回调和新合法帧刚好交错,代码会检测 `daemon`
+是否已经被重新喂狗,避免误清空刚更新的数据。
 
 ## 数据结构
 
@@ -94,23 +96,24 @@ typedef struct
 
 ### 摇杆与拨轮
 
-| 字段 | 含义 |
-| --- | --- |
+| 字段          | 含义      |
+|-------------|---------|
 | `rocker_r_` | 右摇杆水平通道 |
 | `rocker_r1` | 右摇杆竖直通道 |
 | `rocker_l_` | 左摇杆水平通道 |
 | `rocker_l1` | 左摇杆竖直通道 |
-| `dial` | 左侧拨轮 |
+| `dial`      | 左侧拨轮    |
 
-原始通道中值为 `RC_CH_VALUE_OFFSET = 1024`。解析后会减去中值偏置,若绝对值超过 `REMOTE_CONTROL_CHANNEL_VALID_LIMIT`,则认为该通道异常并清零。
+原始通道中值为 `RC_CH_VALUE_OFFSET = 1024`。解析后会减去中值偏置,若绝对值超过 `REMOTE_CONTROL_CHANNEL_VALID_LIMIT`
+,则认为该通道异常并清零。
 
 ### 开关
 
-| 宏 | 数值 | 含义 |
-| --- | --- | --- |
-| `RC_SW_UP` | 1 | 开关向上 |
-| `RC_SW_DOWN` | 2 | 开关向下 |
-| `RC_SW_MID` | 3 | 开关居中 |
+| 宏            | 数值 | 含义   |
+|--------------|----|------|
+| `RC_SW_UP`   | 1  | 开关向上 |
+| `RC_SW_DOWN` | 2  | 开关向下 |
+| `RC_SW_MID`  | 3  | 开关居中 |
 
 判断宏:
 
@@ -134,7 +137,7 @@ switch_is_down(s);
 
 ## 上层使用
 
-`RobotCMDTask()` 每周期调用 `RemoteControlGet()` 获取快照,再根据遥控器状态生成底盘、云台、发射命令。
+迁入遥控业务后，建议由 `RobotCMDTask()` 每周期调用 `RemoteControlGet()` 获取快照，再根据遥控器状态生成各执行 APP 的控制目标。
 
 当前控制约定:
 
@@ -147,4 +150,4 @@ switch_is_down(s);
 - 拨轮向下超过阈值: 进入急停。
 - 拨轮向上: 摩擦轮/拨弹控制。
 
-遥控器离线时,`RobotCMDTask()` 会进入急停,并禁止通过清零后的遥控器数据误恢复。
+遥控器离线时，迁入的 `RobotCMDTask()` 必须进入明确的安全状态，并禁止通过清零后的遥控器数据误恢复。

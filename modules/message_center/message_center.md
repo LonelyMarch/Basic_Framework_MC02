@@ -318,9 +318,9 @@ void GimbalTask(void)
 }
 ```
 
-## 当前工程中的 topic
+## 当前预留的 topic
 
-单板模式下，当前主要 topic 如下：
+消息中心目前仍预留 cmd、gimbal、chassis、shoot 之间的命令和反馈 topic ID，但空 APP 尚未注册发布者、订阅者或消息数据结构。迁入业务时应根据实际数据流确认是否保留、重命名或新增这些 topic：
 
 | topic ID | 调试名 | 发布者 | 订阅者 | 消息类型 |
 | --- | --- | --- | --- | --- |

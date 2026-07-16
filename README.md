@@ -118,21 +118,15 @@
 | 功能类别 | 模块                                                         |
 | -------- | ------------------------------------------------------------ |
 | 电机     | DJI、HT海泰04、瓴控LK、步进电机、舵机                        |
-| 通信     | 多板通信(基于CAN)、seasky协议上位机通信、裁判系统数据/UI/多机、vofa协议、DT7-DR16遥控器 |
+| 通信     | 多板通信(基于CAN)、ESP32-S3 HTTP转UART上位机通信、vofa协议、DT7-DR16遥控器；裁判系统模块已弃用 |
 | 功能模块 | 蜂鸣器、lcd、bmi088、ist8310、超级电容、TFminiPlus、         |
 | 应用支持 | 常用算法库、守护线程、消息中心                               |
 
 #### 应用封装
 
-作为命令发布主体的robot_cmd
+当前 APP 层已清除具体机器人业务，只保留 `robot_cmd`、`gimbal`、`chassis`、`shoot` 的空接口，以及电机、daemon 和 APP 控制任务框架，作为后续迁入新项目的基线。
 
-用于步兵、英雄、哨兵、无人机的gimbal
-
-麦克纳姆轮/全向轮底盘的chassis
-
-平衡步兵的底盘balance_chassis
-
-装配了发射机构的机器人的shoot
+各 APP 当前不会注册设备实例或产生控制输出。迁移方法参见 [参考项目迁入指南](application/参考项目迁入指南.md)。
 
 
 
@@ -198,19 +192,17 @@
 
 ### 初始化
 
-![image-20230725153635454](.assets/image-20230725153635454.png)
+当前初始化路径为 `main() -> RobotInit() -> BSPInit()/空 APP Init()`。完成 `osKernelInitialize()` 后，`MX_FREERTOS_Init()` 调用 `RobotOSTaskInit()` 创建 BSP 与 APP 运行期任务。
 
 ### 任务结构
 
-app、module和bsp都有相应的rtos任务。BSP层统一使用`bsp_service`将中断中的轻量事件延后到任务上下文执行,以保证系统响应的实时性和数据完整性。有一些module和app根据功能需要会创建定时任务或事件驱动的任务，这些任务都在初始化时注册，并在特定的时刻被唤醒或周期执行。
+当前由 BSP 创建 CAN、延后事件和异步 Flash 后台任务；APP 层创建 `motor_task`、`daemon_task` 和 `app_task`。其中 `app_task` 按 `cmd -> gimbal -> chassis -> shoot` 顺序调用空业务入口，便于后续逐步迁入控制逻辑。
 
-<img src=".assets/image-20230725152433502.png" alt="image-20230725152433502" style="zoom:50%;" />
+默认任务包括 BSP 后台任务、1 ms 电机管理任务、10 ms daemon 任务和 5 ms APP 控制任务。当前没有业务实例，任务只维持迁移框架。
 
 ### 数据流
 
-![](.assets/dataflow.svg)
-
-<center>建议浏览器打开SVG查看<center>
+迁入后推荐的数据流为：输入设备进入 `robot_cmd`，控制目标通过 `message_center` 传给执行 APP，执行 APP 只设置 module 目标，实际通信由驱动管理任务完成。当前空 APP 尚未注册任何消息端点。
 
 ​    
 
@@ -260,9 +252,7 @@ app、module和bsp都有相应的rtos任务。BSP层统一使用`bsp_service`将
 
 ### 编译烧录
 
-本项目是基于RoboMaster开发板C型的示例，MCU为STM32F407IG，使用了板载的imu bmi-088，驱动标准的步兵机器人：2自由度GM6020云台、m2006电机拨盘+2*m3508电机摩擦轮的发射机构和MG90舵机弹舱盖，以及带有超级电容控制器的4轮麦克纳姆底盘。
-
-首先在`app/robot_def.h`中根据注释修改开发板和机器人配置，再在各个app中修改初始化配置（如电机id，上位机通信波特率/使用串口或VCP，imu速率，超级电容id等）。
+当前工程使用 STM32H723 平台，APP 层为无具体业务的迁移基线。开始开发前，请先阅读 [项目架构说明](doc/项目架构说明.md) 和 [参考项目迁入指南](application/参考项目迁入指南.md)，再在各 APP 的 `Init()` 与 `Task()` 空入口中逐步接入实例和状态机。
 
 接着根据[VSCode+Ozone使用方法.md](.Doc/VSCode+Ozone使用方法.md)配置好编译下载环境之后（***再次建议使用Msys2+mingw64/ucrt64/clang64的方式配置环境！***），在VSCode中打开项目，点击上方tab页的终端（terminal）->运行构建任务（run build task)，便启动编译，若没有问题，最终会在终端中输出如下信息：
 
@@ -281,6 +271,13 @@ app、module和bsp都有相应的rtos任务。BSP层统一使用`bsp_service`将
 ### 基本文档
 
 根目录下的README.md即本说明文档，帮助开发者速览本项目。
+
+当前工程补充文档：
+
+- [项目架构说明](doc/项目架构说明.md)：描述当前实际分层、启动流程和任务结构。
+- [APP 层当前架构](application/application.md)：说明空业务 APP 骨架。
+- [APP 层应用编写指引](application/APP层应用编写指引.md)：说明 APP 边界和编码约束。
+- [参考项目迁入指南](application/参考项目迁入指南.md)：提供分阶段迁移步骤和检查表。
 
 `.Doc`目录下有**8**个markdown文档，分别为：
 
@@ -357,6 +354,6 @@ ST官方现在将HAL放入github维护。想要获取最新的支持，可以自
 
 ## 致谢
 
-本框架设计参考了哈尔滨工业大学（深圳）南工骁鹰🦅战队的EC_framework以及RoboMaster官方的RoboRTS-firmware🤖。姿态解算改进自哈尔滨工程大学创梦之翼🛩️的四元数EKF姿态解算。裁判系统数据解析移植了深圳大学RoboPilot2021年电控英雄开源代码。
+本框架设计参考了哈尔滨工业大学（深圳）南工骁鹰🦅战队的EC_framework以及RoboMaster官方的RoboRTS-firmware🤖。姿态解算改进自哈尔滨工程大学创梦之翼🛩️的四元数EKF姿态解算。已弃用并仅作历史参考的裁判系统数据解析源码移植自深圳大学RoboPilot2021年电控英雄开源代码。
 
 感谢2022-2023赛季跃鹿战队电控组参与新框架测试和开发的队员们，包括设计出机器人平台的机械组队员，还有一起联调的视觉组队员，以及负责拍摄、记录、宣传的运营组成员。

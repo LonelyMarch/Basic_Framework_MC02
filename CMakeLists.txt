@@ -81,21 +81,21 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     modules/algorithm/crc16.c
     modules/algorithm/user_lib.c
     modules/BMI088/bmi088.c
-    modules/imu/ins_task.c
-    modules/master_machine/master_process.c
-    modules/master_machine/seasky_protocol.c
+    modules/BMI088/ins_task.c
+    modules/DMimu/dm_imu.c
+    modules/master_machine/master_machine.c
+    modules/master_machine/master_protocol.c
     modules/motor/DJImotor/dji_motor.c
     modules/motor/HTmotor/HT04.c
+    modules/motor/HTmotor/htm_motor.c
+    modules/motor/HTmotor/htm_rs485.c
     modules/motor/LKmotor/LK9025.c
     modules/motor/DMmotor/dmmotor.c
+    modules/motor/DDTmotor/ddt_motor.c
     modules/motor/step_motor/step_motor.c
     modules/motor/servo_motor/servo_motor.c
     modules/motor/motor_task.c
     modules/lcd/lcd.c
-    modules/referee/crc_ref.c
-    modules/referee/rm_referee.c
-    modules/referee/referee_UI.c
-    modules/referee/referee_task.c
     modules/remote/remote_control.c
     modules/super_cap/super_cap.c
     modules/can_comm/can_comm.c
@@ -103,19 +103,20 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     modules/daemon/daemon.c
     modules/alarm/buzzer.c
 
+    application/cmd/robot_cmd.c
     application/gimbal/gimbal.c
     application/chassis/chassis.c
     application/shoot/shoot.c
-    application/cmd/robot_cmd.c
     application/robot.c
+    application/robot_task.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    application/cmd
+    application/gimbal
     application/chassis
     application/shoot
-    application/gimbal
-    application/cmd
     application
 
     bsp/dwt
@@ -134,7 +135,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
     modules/algorithm
     modules/BMI088
-    modules/imu
+    modules/DMimu
     modules/master_machine
     modules/motor/DJImotor
     modules/motor/LKmotor
@@ -142,9 +143,9 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     modules/motor/step_motor
     modules/motor/servo_motor
     modules/motor/DMmotor
+    modules/motor/DDTmotor
     modules/motor
     modules/lcd
-    modules/referee
     modules/remote
     modules/super_cap
     modules/can_comm

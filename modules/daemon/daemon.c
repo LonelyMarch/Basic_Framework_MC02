@@ -5,12 +5,12 @@
 
 // 用于保存所有的daemon instance
 static DaemonInstance daemon_instance_pool[DAEMON_MX_CNT]; // daemon实例静态池,避免初始化阶段依赖heap分配
-static DaemonInstance *daemon_instances[DAEMON_MX_CNT] = {NULL};
+static DaemonInstance* daemon_instances[DAEMON_MX_CNT] = {NULL};
 static uint8_t idx; // 用于记录当前的daemon instance数量,配合回调使用
 
-DaemonInstance *DaemonRegister(Daemon_Init_Config_s *config)
+DaemonInstance* DaemonRegister(Daemon_Init_Config_s* config)
 {
-    DaemonInstance *instance;
+    DaemonInstance* instance;
 
     if (config == NULL)
     {
@@ -43,7 +43,7 @@ DaemonInstance *DaemonRegister(Daemon_Init_Config_s *config)
 }
 
 /* "喂狗"函数 */
-void DaemonReload(DaemonInstance *instance)
+void DaemonReload(DaemonInstance* instance)
 {
     if (instance == NULL)
         return;
@@ -51,7 +51,7 @@ void DaemonReload(DaemonInstance *instance)
     instance->temp_count = instance->reload_count;
 }
 
-uint8_t DaemonIsOnline(DaemonInstance *instance)
+uint8_t DaemonIsOnline(DaemonInstance* instance)
 {
     if (instance == NULL)
         return 0U;
@@ -61,7 +61,7 @@ uint8_t DaemonIsOnline(DaemonInstance *instance)
 
 void DaemonTask()
 {
-    DaemonInstance *dins; // 提高可读性同时降低访存开销
+    DaemonInstance* dins; // 提高可读性同时降低访存开销
     for (size_t i = 0; i < idx; ++i)
     {
         uint8_t should_callback;
@@ -93,6 +93,7 @@ void DaemonTask()
         }
     }
 }
+
 // (需要id的原因是什么?) 下面是copilot的回答!
 // 需要id的原因是因为有些module可能有多个实例,而我们需要知道具体是哪个实例offline
 // 如果只有一个实例,则可以不用id,直接调用callback即可

@@ -43,7 +43,7 @@ static const uint16_t crc16_table[256] =
 /*
  * @brief 计算CRC16,空指针或长度为0时返回CRC_START_16。
  */
-uint16_t crc_16(const uint8_t *input_str, uint16_t num_bytes)
+uint16_t crc_16(const uint8_t* input_str, uint16_t num_bytes)
 {
     uint16_t crc = CRC_START_16;
 
@@ -63,7 +63,7 @@ uint16_t crc_16(const uint8_t *input_str, uint16_t num_bytes)
 /*
  * @brief 计算MODBUS CRC16,空指针或长度为0时返回CRC_START_MODBUS。
  */
-uint16_t crc_modbus(const uint8_t *input_str, uint16_t num_bytes)
+uint16_t crc_modbus(const uint8_t* input_str, uint16_t num_bytes)
 {
     uint16_t crc = CRC_START_MODBUS;
 

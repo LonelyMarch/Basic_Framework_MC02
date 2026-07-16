@@ -21,14 +21,14 @@ static inline float PIDAbsF(float value)
 /* ----------------------------下面是pid优化环节的实现---------------------------- */
 
 // 梯形积分
-static void f_Trapezoid_Intergral(PIDInstance *pid)
+static void f_Trapezoid_Intergral(PIDInstance* pid)
 {
     // 计算梯形的面积,(上底+下底)*高/2
     pid->ITerm = pid->Ki * ((pid->Err + pid->Last_Err) / 2) * pid->dt;
 }
 
 // 变速积分(误差小时积分作用更强)
-static void f_Changing_Integration_Rate(PIDInstance *pid)
+static void f_Changing_Integration_Rate(PIDInstance* pid)
 {
     if (pid->Err * pid->Iout > 0)
     {
@@ -49,7 +49,7 @@ static void f_Changing_Integration_Rate(PIDInstance *pid)
     }
 }
 
-static void f_Integral_Limit(PIDInstance *pid)
+static void f_Integral_Limit(PIDInstance* pid)
 {
     float temp_Iout = pid->Iout + pid->ITerm;
     float temp_Output = pid->Pout + pid->Iout + pid->Dout;
@@ -75,13 +75,13 @@ static void f_Integral_Limit(PIDInstance *pid)
 }
 
 // 微分先行(仅使用反馈值而不计参考输入的微分)
-static void f_Derivative_On_Measurement(PIDInstance *pid)
+static void f_Derivative_On_Measurement(PIDInstance* pid)
 {
     pid->Dout = pid->Kd * (pid->Last_Measure - pid->Measure) / pid->dt;
 }
 
 // 微分滤波(采集微分时,滤除高频噪声)
-static void f_Derivative_Filter(PIDInstance *pid)
+static void f_Derivative_Filter(PIDInstance* pid)
 {
     float denom = pid->Derivative_LPF_RC + pid->dt;
 
@@ -91,11 +91,11 @@ static void f_Derivative_Filter(PIDInstance *pid)
     }
 
     pid->Dout = pid->Dout * pid->dt / denom +
-                pid->Last_Dout * pid->Derivative_LPF_RC / denom;
+        pid->Last_Dout * pid->Derivative_LPF_RC / denom;
 }
 
 // 输出滤波
-static void f_Output_Filter(PIDInstance *pid)
+static void f_Output_Filter(PIDInstance* pid)
 {
     float denom = pid->Output_LPF_RC + pid->dt;
 
@@ -105,11 +105,11 @@ static void f_Output_Filter(PIDInstance *pid)
     }
 
     pid->Output = pid->Output * pid->dt / denom +
-                  pid->Last_Output * pid->Output_LPF_RC / denom;
+        pid->Last_Output * pid->Output_LPF_RC / denom;
 }
 
 // 输出限幅
-static void f_Output_Limit(PIDInstance *pid)
+static void f_Output_Limit(PIDInstance* pid)
 {
     if (pid->Output > pid->MaxOut)
     {
@@ -122,7 +122,7 @@ static void f_Output_Limit(PIDInstance *pid)
 }
 
 // 电机堵转检测
-static void f_PID_ErrorHandle(PIDInstance *pid)
+static void f_PID_ErrorHandle(PIDInstance* pid)
 {
     /*Motor Blocked Handle*/
     if (PIDAbsF(pid->Output) < pid->MaxOut * 0.001f || PIDAbsF(pid->Ref) < 0.0001f)
@@ -153,7 +153,7 @@ static void f_PID_ErrorHandle(PIDInstance *pid)
  * @param pid    PID实例
  * @param config PID初始化设置
  */
-void PIDInit(PIDInstance *pid, PID_Init_Config_s *config)
+void PIDInit(PIDInstance* pid, PID_Init_Config_s* config)
 {
     if (pid == NULL || config == NULL)
     {
@@ -184,7 +184,7 @@ void PIDInit(PIDInstance *pid, PID_Init_Config_s *config)
  * @param[in]      期望值
  * @retval         返回空
  */
-float PIDCalculate(PIDInstance *pid, float measure, float ref)
+float PIDCalculate(PIDInstance* pid, float measure, float ref)
 {
     if (pid == NULL)
     {
@@ -233,7 +233,7 @@ float PIDCalculate(PIDInstance *pid, float measure, float ref)
         if (pid->Improve & PID_Integral_Limit)
             f_Integral_Limit(pid);
 
-        pid->Iout += pid->ITerm;                         // 累加积分
+        pid->Iout += pid->ITerm; // 累加积分
         pid->Output = pid->Pout + pid->Iout + pid->Dout; // 计算输出
 
         // 输出滤波

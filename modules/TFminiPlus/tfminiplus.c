@@ -39,7 +39,7 @@ static void TFMiniPlusDelayMs(uint32_t delay_ms)
  *
  * TFmini Plus常用数据帧的最后一字节为前面所有字节的低8位累加和。
  */
-static uint8_t TFMiniPlusCalcChecksum(const uint8_t *data, uint16_t len)
+static uint8_t TFMiniPlusCalcChecksum(const uint8_t* data, uint16_t len)
 {
     uint16_t sum = 0U;
 
@@ -59,7 +59,7 @@ static uint8_t TFMiniPlusCalcChecksum(const uint8_t *data, uint16_t len)
 /**
  * @brief 校验测距数据帧格式。
  */
-static HAL_StatusTypeDef TFMiniPlusCheckFrame(const uint8_t *frame)
+static HAL_StatusTypeDef TFMiniPlusCheckFrame(const uint8_t* frame)
 {
     uint8_t standard_checksum;
     uint8_t extended_checksum;
@@ -95,9 +95,9 @@ static HAL_StatusTypeDef TFMiniPlusCheckFrame(const uint8_t *frame)
     return HAL_OK;
 }
 
-TFMiniPlusInstance *TFMiniPlusRegister(const TFMiniPlus_Init_Config_s *config)
+TFMiniPlusInstance* TFMiniPlusRegister(const TFMiniPlus_Init_Config_s* config)
 {
-    TFMiniPlusInstance *instance;
+    TFMiniPlusInstance* instance;
     IIC_Init_Config_s iic_config;
 
     if (config == NULL || config->hi2c == NULL)
@@ -141,7 +141,7 @@ TFMiniPlusInstance *TFMiniPlusRegister(const TFMiniPlus_Init_Config_s *config)
     return instance;
 }
 
-HAL_StatusTypeDef TFMiniPlusRead(TFMiniPlusInstance *instance)
+HAL_StatusTypeDef TFMiniPlusRead(TFMiniPlusInstance* instance)
 {
     HAL_StatusTypeDef status;
 
@@ -188,7 +188,7 @@ HAL_StatusTypeDef TFMiniPlusRead(TFMiniPlusInstance *instance)
     return HAL_OK;
 }
 
-uint16_t TFMiniPlusGetDistance(const TFMiniPlusInstance *instance)
+uint16_t TFMiniPlusGetDistance(const TFMiniPlusInstance* instance)
 {
     if (instance == NULL)
     {
@@ -198,7 +198,7 @@ uint16_t TFMiniPlusGetDistance(const TFMiniPlusInstance *instance)
     return instance->distance;
 }
 
-uint16_t TFMiniPlusGetStrength(const TFMiniPlusInstance *instance)
+uint16_t TFMiniPlusGetStrength(const TFMiniPlusInstance* instance)
 {
     if (instance == NULL)
     {
@@ -208,7 +208,7 @@ uint16_t TFMiniPlusGetStrength(const TFMiniPlusInstance *instance)
     return instance->strength;
 }
 
-uint8_t TFMiniPlusIsOnline(const TFMiniPlusInstance *instance)
+uint8_t TFMiniPlusIsOnline(const TFMiniPlusInstance* instance)
 {
     if (instance == NULL)
     {

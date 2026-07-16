@@ -71,7 +71,7 @@ extern "C" {
 
 typedef enum
 {
-    LCD_TEXT_MODE_NORMAL = 0U,  // 同时写前景色和背景色，会覆盖整个字符矩形区域
+    LCD_TEXT_MODE_NORMAL = 0U, // 同时写前景色和背景色，会覆盖整个字符矩形区域
     LCD_TEXT_MODE_OVERLAY = 1U, // 只写前景像素，背景区域保持原显示内容不变
 } LCD_TextMode_e;
 
@@ -98,45 +98,104 @@ typedef enum
 #define LCD_LGRAYBLUE  0xA651U
 #define LCD_LBBLUE     0x2B12U
 
+
 HAL_StatusTypeDef LCD_Init(void);
+
+
 HAL_StatusTypeDef LCDTaskInit(void);
+
+
 HAL_StatusTypeDef LCD_SetBacklight(uint8_t enable);
+
+
 HAL_StatusTypeDef LCD_DisplayOn(void);
+
+
 HAL_StatusTypeDef LCD_DisplayOff(void);
 
+
 void LCD_Clear(uint16_t color);
+
+
 void LCD_Fill(uint16_t xsta, uint16_t ysta, uint16_t xend, uint16_t yend, uint16_t color);
+
+
 void LCD_DrawPoint(uint16_t x, uint16_t y, uint16_t color);
+
+
 void LCD_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
+
+
 void LCD_DrawRectangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
+
+
 void LCD_DrawCircle(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color);
 
-void LCD_ShowChinese(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
-void LCD_ShowChinese12x12(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
-void LCD_ShowChinese16x16(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
-void LCD_ShowChinese24x24(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
-void LCD_ShowChinese32x32(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
+
+void LCD_ShowChinese(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
+
+
+void LCD_ShowChinese12x12(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode);
+
+
+void LCD_ShowChinese16x16(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode);
+
+
+void LCD_ShowChinese24x24(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode);
+
+
+void LCD_ShowChinese32x32(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode);
+
 
 void LCD_ShowChar(uint16_t x, uint16_t y, uint8_t num, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
-void LCD_ShowString(uint16_t x, uint16_t y, const uint8_t *p, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
+
+
+void LCD_ShowString(uint16_t x, uint16_t y, const uint8_t* p, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
+
+
 void LCD_ShowIntNum(uint16_t x, uint16_t y, uint16_t num, uint8_t len, uint16_t fc, uint16_t bc, uint8_t sizey);
-void LCD_ShowFloatNum(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc, uint8_t sizey);
-void LCD_ShowFloatNum1(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc, uint8_t sizey);
+
+
+void LCD_ShowFloatNum(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc,
+                      uint8_t sizey);
+
+
+void LCD_ShowFloatNum1(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc,
+                       uint8_t sizey);
+
+
 void LCD_ShowPicture(uint16_t x, uint16_t y, uint16_t length, uint16_t width, const uint8_t pic[]);
-void LCD_Printf(uint16_t x, uint16_t y, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode, const char *fmt, ...);
+
+
+void LCD_Printf(uint16_t x, uint16_t y, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode, const char* fmt, ...);
+
 
 HAL_StatusTypeDef LCD_AsyncClear(uint16_t color);
+
+
 HAL_StatusTypeDef LCD_AsyncFill(uint16_t xsta, uint16_t ysta, uint16_t xend, uint16_t yend, uint16_t color);
+
+
 HAL_StatusTypeDef LCD_AsyncDrawPoint(uint16_t x, uint16_t y, uint16_t color);
+
+
 HAL_StatusTypeDef LCD_AsyncDrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
+
+
 HAL_StatusTypeDef LCD_AsyncDrawRectangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
+
+
 HAL_StatusTypeDef LCD_AsyncPrintf(uint16_t x,
                                   uint16_t y,
                                   uint16_t fc,
                                   uint16_t bc,
                                   uint8_t sizey,
                                   uint8_t mode,
-                                  const char *fmt,
+                                  const char* fmt,
                                   ...);
 
 #ifdef __cplusplus

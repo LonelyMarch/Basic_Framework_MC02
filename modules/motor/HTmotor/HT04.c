@@ -1,239 +1,289 @@
 #include "HT04.h"
-#include "memory.h"
+
+#include <string.h>
+
+#include "bsp_dwt.h" // DWT_GetDeltaT()：计算相邻反馈帧之间的时间间隔
+#include "bsp_log.h"
 #include "general_def.h"
 #include "user_lib.h"
-#include "cmsis_os.h"
-#include "string.h"
-#include "daemon.h"
-#include "stdlib.h"
-#include "bsp_log.h"
 
-static uint8_t idx;
-static HTMotorInstance *ht_motor_instance[HT_MOTOR_CNT];
-static osThreadId_t ht_task_handle[HT_MOTOR_CNT];
-static uint8_t zero_buff[6] = {0};
+#define HT04_SPEED_BUFFER_SIZE 5U
+#define HT04_CURRENT_SMOOTH_COEF 0.9f
+#define HT04_SPEED_BIAS_RAD_S (-0.0109901428f)
+#define HT04_CAN_TIMEOUT_MS 0.5f
 
-/**
- * @brief 设置电机模式,报文内容[0xff,0xff,0xff,0xff,0xff,0xff,0xff,cmd]
- *
- * @param cmd
- * @param motor
- */
-static void HTMotorSetMode(HTMotor_Mode_t cmd, HTMotorInstance *motor)
+#define HT04_KP_MIN 0.0f
+#define HT04_KP_MAX 500.0f
+#define HT04_KD_MIN 0.0f
+#define HT04_KD_MAX 5.0f
+
+#define HT04_CMD_MOTOR_MODE 0xFCU
+#define HT04_CMD_RESET_MODE 0xFDU
+#define HT04_CMD_ZERO_POSITION 0xFEU
+
+typedef struct
 {
-    memset(motor->motor_can_instace->tx_buff, 0xff, 7);  // 发送电机指令的时候前面7bytes都是0xff
-    motor->motor_can_instace->tx_buff[7] = (uint8_t)cmd; // 最后一位是命令id
-    CANTransmit(motor->motor_can_instace, 1);
-    memcpy(motor->motor_can_instace->tx_buff, zero_buff, 6);
-}
-/* 两个用于将uint值和float值进行映射的函数,在设定发送值和解析反馈值时使用 */
-static uint16_t float_to_uint(float x, float x_min, float x_max, uint8_t bits)
+    HTMotorInstance instance;
+    float speed_buffer[HT04_SPEED_BUFFER_SIZE];
+} HTMotorPoolEntry;
+
+static HTMotorPoolEntry ht_motor_pool[HT04_MOTOR_CNT];
+static HTMotorInstance *ht_motor_instances[HT04_MOTOR_CNT];
+static uint8_t ht_motor_count;
+
+static uint16_t HTMotorFloatToUint(float value, float min_value, float max_value, uint8_t bits)
 {
-    float span = x_max - x_min;
-    float offset = x_min;
-    return (uint16_t)((x - offset) * ((float)((1 << bits) - 1)) / span);
-}
-static float uint_to_float(int x_int, float x_min, float x_max, int bits)
-{
-    float span = x_max - x_min;
-    float offset = x_min;
-    return ((float)x_int) * span / ((float)((1 << bits) - 1)) + offset;
+    const float span = max_value - min_value;
+    const uint32_t max_integer = (1UL << bits) - 1UL;
+
+    LIMIT_MIN_MAX(value, min_value, max_value);
+    return (uint16_t)((value - min_value) * (float)max_integer / span);
 }
 
-/**
- * @brief 解析电机反馈值
- *
- * @param motor_can 收到
- */
+static float HTMotorUintToFloat(uint16_t value, float min_value, float max_value, uint8_t bits)
+{
+    const float span = max_value - min_value;
+    const uint32_t max_integer = (1UL << bits) - 1UL;
+    return (float)value * span / (float)max_integer + min_value;
+}
+
+static void HTMotorPackTorqueFrame(uint8_t frame[8], float torque_nm)
+{
+    const uint16_t position = HTMotorFloatToUint(0.0f, HT04_POSITION_MIN_RAD, HT04_POSITION_MAX_RAD, 16U);
+    const uint16_t velocity = HTMotorFloatToUint(0.0f, HT04_VELOCITY_MIN_RAD_S, HT04_VELOCITY_MAX_RAD_S, 12U);
+    const uint16_t kp = HTMotorFloatToUint(0.0f, HT04_KP_MIN, HT04_KP_MAX, 12U);
+    const uint16_t kd = HTMotorFloatToUint(0.0f, HT04_KD_MIN, HT04_KD_MAX, 12U);
+    const uint16_t torque = HTMotorFloatToUint(torque_nm, HT04_TORQUE_MIN_NM, HT04_TORQUE_MAX_NM, 12U);
+
+    frame[0] = (uint8_t)(position >> 8U);
+    frame[1] = (uint8_t)position;
+    frame[2] = (uint8_t)(velocity >> 4U);
+    frame[3] = (uint8_t)(((velocity & 0x0FU) << 4U) | (kp >> 8U));
+    frame[4] = (uint8_t)kp;
+    frame[5] = (uint8_t)(kd >> 4U);
+    frame[6] = (uint8_t)(((kd & 0x0FU) << 4U) | (torque >> 8U));
+    frame[7] = (uint8_t)torque;
+}
+
+static HAL_StatusTypeDef HTMotorSendSpecialCommand(HTMotorInstance *motor, uint8_t command)
+{
+    if (motor == NULL || motor->motor_can_instance == NULL)
+        return HAL_ERROR;
+
+    memset(motor->motor_can_instance->tx_buff, 0xFF, 7U);
+    motor->motor_can_instance->tx_buff[7] = command;
+    return CANTransmit(motor->motor_can_instance, 1.0f) != 0U ? HAL_OK : HAL_ERROR;
+}
+
 static void HTMotorDecode(CANInstance *motor_can)
 {
-    uint16_t tmp; // 用于暂存解析值,稍后转换成float数据,避免多次创建临时变量
-    uint8_t const *rxbuff = motor_can->rx_buff;
-    HTMotorInstance *motor = (HTMotorInstance *)motor_can->id;
-    HTMotor_Measure_t *measure = &(motor->measure); // 将can实例中保存的id转换成电机实例的指针
+    HTMotorInstance *motor;
+    HTMotor_Measure_t *measure;
+    HTMotorPoolEntry *entry;
+    uint16_t raw_position;
+    uint16_t raw_velocity;
+    uint16_t raw_current;
+    float direction = 1.0f;
 
-    DaemonReload(motor->motor_daemon);
+    if (motor_can == NULL || motor_can->id == NULL || motor_can->rx_len != 6U)
+        return;
+
+    motor = (HTMotorInstance *)motor_can->id;
+    if (motor->expected_motor_id != 0U && motor_can->rx_buff[0] != motor->expected_motor_id)
+        return;
+
+    if (motor->motor_reverse_flag == MOTOR_DIRECTION_REVERSE)
+        direction = -1.0f;
+
+    measure = &motor->measure;
+    entry = (HTMotorPoolEntry *)motor;
+    raw_position = (uint16_t)(((uint16_t)motor_can->rx_buff[1] << 8U) | motor_can->rx_buff[2]);
+    raw_velocity = (uint16_t)(((uint16_t)motor_can->rx_buff[3] << 4U) | (motor_can->rx_buff[4] >> 4U));
+    raw_current = (uint16_t)((((uint16_t)motor_can->rx_buff[4] & 0x0FU) << 8U) | motor_can->rx_buff[5]);
+
+    measure->last_position_rad = measure->position_rad;
+    measure->position_rad = direction * HTMotorUintToFloat(raw_position,
+                                                            HT04_POSITION_MIN_RAD,
+                                                            HT04_POSITION_MAX_RAD,
+                                                            16U);
+    measure->velocity_rad_s = AverageFilter(direction *
+                                                (HTMotorUintToFloat(raw_velocity,
+                                                                    HT04_VELOCITY_MIN_RAD_S,
+                                                                    HT04_VELOCITY_MAX_RAD_S,
+                                                                    12U) -
+                                                 HT04_SPEED_BIAS_RAD_S),
+                                            entry->speed_buffer,
+                                            HT04_SPEED_BUFFER_SIZE);
+    measure->phase_current_a = HT04_CURRENT_SMOOTH_COEF * direction *
+                                   HTMotorUintToFloat(raw_current,
+                                                      HT04_CURRENT_MIN_A,
+                                                      HT04_CURRENT_MAX_A,
+                                                      12U) +
+                               (1.0f - HT04_CURRENT_SMOOTH_COEF) * measure->phase_current_a;
+    measure->motor_id = motor_can->rx_buff[0];
     measure->feed_dt = DWT_GetDeltaT(&measure->feed_cnt);
 
-    measure->last_angle = measure->total_angle;
-    tmp = (uint16_t)((rxbuff[1] << 8) | rxbuff[2]);
-    measure->total_angle = uint_to_float(tmp, P_MIN, P_MAX, 16);
-
-    tmp = (uint16_t)(rxbuff[3] << 4) | (rxbuff[4] >> 4);
-    measure->speed_rads = AverageFilter((uint_to_float(tmp, V_MIN, V_MAX, 12) - HT_SPEED_BIAS), measure->speed_buff, SPEED_BUFFER_SIZE);
-
-    tmp = (uint16_t)(((rxbuff[4] & 0x0f) << 8) | rxbuff[5]);
-    measure->real_current = CURRENT_SMOOTH_COEF * uint_to_float(tmp, T_MIN, T_MAX, 12) +
-                            (1 - CURRENT_SMOOTH_COEF) * measure->real_current;
+    if (motor->offline != 0U)
+    {
+        motor->offline = 0U;
+        LOGINFO("[ht04] motor %u feedback recovered, remains stopped",
+                (unsigned int)motor->expected_motor_id);
+    }
+    DaemonReload(motor->motor_daemon);
 }
 
 static void HTMotorLostCallback(void *motor_ptr)
 {
     HTMotorInstance *motor = (HTMotorInstance *)motor_ptr;
-    LOGWARNING("[ht_motor] motor %d lost\n", motor->motor_can_instace->tx_id);
-    if (++motor->lost_cnt % 10 != 0)
-        HTMotorSetMode(CMD_MOTOR_MODE, motor); // 尝试重新让电机进入控制模式
+
+    if (motor == NULL)
+        return;
+
+    motor->torque_ref_nm = 0.0f;
+    motor->stop_flag = MOTOR_STOP;
+    motor->enabled = 0U;
+    if (motor->offline == 0U)
+    {
+        motor->offline = 1U;
+        LOGWARNING("[ht04] motor %u lost, output locked",
+                   (unsigned int)motor->expected_motor_id);
+    }
 }
 
-/* 海泰电机一生黑,什么垃圾协议! */
-void HTMotorCalibEncoder(HTMotorInstance *motor)
+HTMotorInstance *HTMotorInit(const HTMotor_Init_Config_s *config)
 {
-    uint16_t p, v, kp, kd, t;
-    p = float_to_uint(0, P_MIN, P_MAX, 16);
-    v = float_to_uint(0, V_MIN, V_MAX, 12);
-    kp = float_to_uint(0, KP_MIN, KP_MAX, 12);
-    kd = float_to_uint(0, KD_MIN, KD_MAX, 12);
-    t = float_to_uint(0, T_MIN, T_MAX, 12);
+    HTMotorPoolEntry *entry;
+    HTMotorInstance *motor;
+    CAN_Init_Config_s can_config;
+    Daemon_Init_Config_s daemon_config;
 
-    uint8_t *buf = motor->motor_can_instace->tx_buff;
-    buf[0] = p >> 8;
-    buf[1] = p & 0xFF;
-    buf[2] = v >> 4;
-    buf[3] = ((v & 0xF) << 4) | (kp >> 8);
-    buf[4] = kp & 0xFF;
-    buf[5] = kd >> 4;
-    buf[6] = ((kd & 0xF) << 4) | (t >> 8);
-    buf[7] = t & 0xff;
-    memcpy(zero_buff, buf, 6); // 初始化的时候至少调用一次,故将其他指令为0时发送的报文保存一下,详见ht04电机说明
-    CANTransmit(motor->motor_can_instace, 1);
-    DWT_Delay(0.005);
-    HTMotorSetMode(CMD_ZERO_POSITION, motor); // sb 玩意校准完了编码器也不为0
-    DWT_Delay(0.005);
-    // HTMotorSetMode(CMD_MOTOR_MODE, motor);
-}
+    if (config == NULL || config->can_init_config.can_handle == NULL || ht_motor_count >= HT04_MOTOR_CNT)
+    {
+        LOGERROR("[ht04] invalid init config or instance limit reached");
+        return NULL;
+    }
 
-HTMotorInstance *HTMotorInit(Motor_Init_Config_s *config)
-{
-    HTMotorInstance *motor = (HTMotorInstance *)malloc(sizeof(HTMotorInstance));
-    memset(motor, 0, sizeof(HTMotorInstance));
+    entry = &ht_motor_pool[ht_motor_count];
+    memset(entry, 0, sizeof(*entry));
+    motor = &entry->instance;
+    motor->motor_reverse_flag = config->motor_reverse_flag;
+    motor->expected_motor_id = config->expected_motor_id;
+    motor->stop_flag = MOTOR_STOP;
+    motor->offline = 1U;
 
-    motor->motor_settings = config->controller_setting_init_config;
-    PIDInit(&motor->current_PID, &config->controller_param_init_config.current_PID);
-    PIDInit(&motor->speed_PID, &config->controller_param_init_config.speed_PID);
-    PIDInit(&motor->angle_PID, &config->controller_param_init_config.angle_PID);
-    motor->other_angle_feedback_ptr = config->controller_param_init_config.other_angle_feedback_ptr;
-    motor->other_speed_feedback_ptr = config->controller_param_init_config.other_speed_feedback_ptr;
+    can_config = config->can_init_config;
+    can_config.can_module_callback = HTMotorDecode;
+    can_config.id = motor;
+    motor->motor_can_instance = CANRegister(&can_config);
+    if (motor->motor_can_instance == NULL)
+        return NULL;
 
-    config->can_init_config.can_module_callback = HTMotorDecode;
-    config->can_init_config.id = motor;
-    motor->motor_can_instace = CANRegister(&config->can_init_config);
+    memset(&daemon_config, 0, sizeof(daemon_config));
+    daemon_config.callback = HTMotorLostCallback;
+    daemon_config.owner_id = motor;
+    daemon_config.reload_count = 5U;
+    motor->motor_daemon = DaemonRegister(&daemon_config);
+    if (motor->motor_daemon == NULL)
+        return NULL;
 
-    Daemon_Init_Config_s conf = {
-        .callback = HTMotorLostCallback,
-        .owner_id = motor,
-        .reload_count = 5, // 20ms
-    };
-    motor->motor_daemon = DaemonRegister(&conf);
+    ht_motor_instances[ht_motor_count++] = motor;
 
-    HTMotorEnable(motor);
-    HTMotorSetMode(CMD_MOTOR_MODE, motor); // 确保电机已经上电并执行电机模式
-    DWT_Delay(0.05f);
-    HTMotorCalibEncoder(motor); // 将当前编码器位置作为零位
-    DWT_Delay(0.05f);           // 保证下一个电机发送时CAN是空闲的,注意应用在初始化模块的时候不应该进入中断
-    ht_motor_instance[idx++] = motor;
+    if (config->enable_on_init != 0U && HTMotorEnable(motor) != HAL_OK)
+        LOGWARNING("[ht04] initial motor-mode command submit failed");
+    if (config->set_zero_on_init != 0U && HTMotorSetCurrentPositionAsZero(motor) != HAL_OK)
+        LOGWARNING("[ht04] initial zero-position command submit failed");
+
     return motor;
 }
 
-void HTMotorSetRef(HTMotorInstance *motor, float ref)
+HAL_StatusTypeDef HTMotorSetTorque(HTMotorInstance *motor, float torque_nm)
 {
-    motor->pid_ref = ref;
+    if (motor == NULL)
+        return HAL_ERROR;
+    if (motor->offline != 0U || motor->enabled == 0U || motor->stop_flag == MOTOR_STOP)
+        return HAL_BUSY;
+
+    LIMIT_MIN_MAX(torque_nm, HT04_TORQUE_MIN_NM, HT04_TORQUE_MAX_NM);
+    motor->torque_ref_nm = torque_nm;
+    return HAL_OK;
 }
 
-/**
- * @brief 为了避免总线堵塞,为每个电机创建一个发送任务
- * @param argument 传入的电机指针
- */
-__attribute__((noreturn)) void HTMotorTask(void *argument)
+HAL_StatusTypeDef HTMotorStop(HTMotorInstance *motor)
 {
-    float set, pid_measure, pid_ref;
-    HTMotorInstance *motor = (HTMotorInstance *)argument;
-    HTMotor_Measure_t *measure = &motor->measure;
-    Motor_Control_Setting_s *setting = &motor->motor_settings;
-    CANInstance *motor_can = motor->motor_can_instace;
-    uint16_t tmp;
-
-    while (1)
-    {
-        pid_ref = motor->pid_ref;
-        if ((setting->close_loop_type & ANGLE_LOOP) && setting->outer_loop_type == ANGLE_LOOP)
-        {
-            if (setting->angle_feedback_source == OTHER_FEED)
-                pid_measure = *motor->other_angle_feedback_ptr;
-            else
-                pid_measure = measure->total_angle;
-            // measure单位是rad,ref是角度,统一到angle下计算,方便建模
-            pid_ref = PIDCalculate(&motor->angle_PID, pid_measure * RAD_2_DEGREE, pid_ref);
-        }
-
-        if ((setting->close_loop_type & SPEED_LOOP) && setting->outer_loop_type & (ANGLE_LOOP | SPEED_LOOP))
-        {
-            if (setting->feedforward_flag & SPEED_FEEDFORWARD)
-                pid_ref += *motor->speed_feedforward_ptr;
-
-            if (setting->angle_feedback_source == OTHER_FEED)
-                pid_measure = *motor->other_speed_feedback_ptr;
-            else
-                pid_measure = measure->speed_rads;
-            // measure单位是rad / s ,ref是angle per sec,统一到angle下计算
-            pid_ref = PIDCalculate(&motor->speed_PID, pid_measure * RAD_2_DEGREE, pid_ref);
-        }
-
-        if (setting->feedforward_flag & CURRENT_FEEDFORWARD)
-            pid_ref += *motor->current_feedforward_ptr;
-        if (setting->close_loop_type & CURRENT_LOOP)
-        {
-            pid_ref = PIDCalculate(&motor->current_PID, measure->real_current, pid_ref);
-        }
-
-        set = pid_ref;
-        if (setting->motor_reverse_flag == MOTOR_DIRECTION_REVERSE)
-            set *= -1;
-
-        LIMIT_MIN_MAX(set, T_MIN, T_MAX);
-        tmp = float_to_uint(set, T_MIN, T_MAX, 12);
-        if (motor->stop_flag == MOTOR_STOP)
-            tmp = float_to_uint(0, T_MIN, T_MAX, 12);
-        motor_can->tx_buff[6] = (tmp >> 8);
-        motor_can->tx_buff[7] = tmp & 0xff;
-
-        CANTransmit(motor_can, 0.5);
-
-        osDelay(1);
-    }
-}
-
-void HTMotorControlInit()
-{
-    char ht_task_name[5] = "ht";
-    // 遍历所有电机实例,创建任务
-    if (!idx)
-        return;
-    for (size_t i = 0; i < idx; i++)
-    {
-        char ht_id_buff[2] = {0};
-        __itoa(i, ht_id_buff, 10);
-        strcat(ht_task_name, ht_id_buff); // 似乎没什么吊用,osthreaddef会把第一个变量当作宏字符串传入,作为任务名
-        // @todo 还需要一个更优雅的方案来区分不同的电机任务
-        const osThreadAttr_t ht_task_attr = {
-            .name = ht_task_name,
-            .stack_size = 128 * 4,
-            .priority = osPriorityNormal,
-        };
-        ht_task_handle[i] = osThreadNew(HTMotorTask, ht_motor_instance[i], &ht_task_attr);
-    }
-}
-
-void HTMotorStop(HTMotorInstance *motor)
-{
+    if (motor == NULL)
+        return HAL_ERROR;
+    motor->torque_ref_nm = 0.0f;
     motor->stop_flag = MOTOR_STOP;
+    return HAL_OK;
 }
 
-void HTMotorEnable(HTMotorInstance *motor)
+HAL_StatusTypeDef HTMotorEnable(HTMotorInstance *motor)
 {
-    motor->stop_flag = MOTOR_ENALBED;
+    if (motor == NULL)
+        return HAL_ERROR;
+    if (HTMotorSendSpecialCommand(motor, HT04_CMD_MOTOR_MODE) != HAL_OK)
+        return HAL_ERROR;
+
+    motor->torque_ref_nm = 0.0f;
+    motor->stop_flag = MOTOR_ENABLED;
+    motor->enabled = 1U;
+    return HAL_OK;
 }
 
-void HTMotorOuterLoop(HTMotorInstance *motor, Closeloop_Type_e type)
+HAL_StatusTypeDef HTMotorDisable(HTMotorInstance *motor)
 {
-    motor->motor_settings.outer_loop_type = type;
+    if (motor == NULL)
+        return HAL_ERROR;
+
+    motor->torque_ref_nm = 0.0f;
+    motor->stop_flag = MOTOR_STOP;
+    if (HTMotorSendSpecialCommand(motor, HT04_CMD_RESET_MODE) != HAL_OK)
+        return HAL_ERROR;
+
+    motor->enabled = 0U;
+    return HAL_OK;
+}
+
+HAL_StatusTypeDef HTMotorSetCurrentPositionAsZero(HTMotorInstance *motor)
+{
+    if (motor == NULL)
+        return HAL_ERROR;
+
+    motor->torque_ref_nm = 0.0f;
+    motor->stop_flag = MOTOR_STOP;
+    if (HTMotorSendSpecialCommand(motor, HT04_CMD_ZERO_POSITION) != HAL_OK)
+        return HAL_ERROR;
+
+    motor->measure.position_rad = 0.0f;
+    motor->measure.last_position_rad = 0.0f;
+    return HAL_OK;
+}
+
+void HTMotorControl(void)
+{
+    for (uint8_t i = 0U; i < ht_motor_count; ++i)
+    {
+        HTMotorInstance *motor = ht_motor_instances[i];
+        float torque_nm;
+
+        if (motor == NULL || motor->motor_can_instance == NULL || motor->enabled == 0U)
+            continue;
+
+        torque_nm = (motor->stop_flag == MOTOR_ENABLED && motor->offline == 0U) ? motor->torque_ref_nm : 0.0f;
+        if (motor->motor_reverse_flag == MOTOR_DIRECTION_REVERSE)
+            torque_nm = -torque_nm;
+
+        HTMotorPackTorqueFrame(motor->motor_can_instance->tx_buff, torque_nm);
+        (void)CANTransmit(motor->motor_can_instance, HT04_CAN_TIMEOUT_MS);
+    }
+}
+
+uint8_t HTMotorIsOnline(const HTMotorInstance *motor)
+{
+    return motor != NULL && motor->offline == 0U;
+}
+
+uint8_t HTMotorIsEnabled(const HTMotorInstance *motor)
+{
+    return motor != NULL && motor->enabled != 0U;
 }

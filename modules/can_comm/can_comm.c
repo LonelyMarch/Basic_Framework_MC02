@@ -6,14 +6,14 @@
 #include "cmsis_os2.h"
 
 static CANCommInstance can_comm_pool[MX_CAN_COMM_COUNT]; // CANComm实例静态池,避免初始化阶段依赖堆分配
-static uint8_t can_comm_idx;                             // 当前已经分配的CANComm实例数量
+static uint8_t can_comm_idx; // 当前已经分配的CANComm实例数量
 
 /**
  * @brief 重置CAN comm的接收状态和buffer
  *
  * @param ins 需要重置的实例
  */
-static void CANCommResetRx(CANCommInstance *ins)
+static void CANCommResetRx(CANCommInstance* ins)
 {
     if (ins == NULL)
     {
@@ -22,7 +22,7 @@ static void CANCommResetRx(CANCommInstance *ins)
 
     // 当前已经收到的buffer清零
     memset(ins->raw_recvbuf, 0, ins->cur_recv_len);
-    ins->recv_state = 0;   // 接收状态重置
+    ins->recv_state = 0; // 接收状态重置
     ins->cur_recv_len = 0; // 当前已经收到的长度重置
     ins->rx_start_time = 0.0f;
 }
@@ -32,14 +32,14 @@ static void CANCommResetRx(CANCommInstance *ins)
  *
  * @param _instance
  */
-static void CANCommRxCallback(CANInstance *_instance)
+static void CANCommRxCallback(CANInstance* _instance)
 {
     if (_instance == NULL)
     {
         return;
     }
 
-    CANCommInstance *comm = (CANCommInstance *)_instance->id; // 注意写法,将can instance的id强制转换为CANCommInstance*类型
+    CANCommInstance* comm = (CANCommInstance*)_instance->id; // 注意写法,将can instance的id强制转换为CANCommInstance*类型
     uint8_t is_new_packet;
     uint8_t crc8;
     uint8_t expected_seq;
@@ -62,14 +62,14 @@ static void CANCommRxCallback(CANInstance *_instance)
 
     /* 当前接收状态判断 */
     is_new_packet = (comm->recv_state == 0U &&
-                     _instance->rx_len >= CAN_COMM_DATA_OFFSET &&
-                     _instance->rx_buff[CAN_COMM_HEADER_INDEX] == CAN_COMM_HEADER);
+        _instance->rx_len >= CAN_COMM_DATA_OFFSET &&
+        _instance->rx_buff[CAN_COMM_HEADER_INDEX] == CAN_COMM_HEADER);
     if (is_new_packet != 0U)
     {
         if (_instance->rx_buff[CAN_COMM_LEN_INDEX] == comm->recv_data_len) // 当前暂不支持动态包长,长度必须和初始化配置一致
         {
-            CANCommResetRx(comm);                          // 新帧头到来时重新同步,避免上一包丢帧后继续错拼
-            comm->recv_state = 1;                          // 设置接收状态为1,说明已经开始接收
+            CANCommResetRx(comm); // 新帧头到来时重新同步,避免上一包丢帧后继续错拼
+            comm->recv_state = 1; // 设置接收状态为1,说明已经开始接收
             comm->rx_seq = _instance->rx_buff[CAN_COMM_SEQ_INDEX];
             comm->rx_start_time = DWT_GetTimeline_ms();
         }
@@ -99,10 +99,12 @@ static void CANCommRxCallback(CANInstance *_instance)
         {
             // 如果buff里本tail的位置等于CAN_COMM_TAIL
             if (comm->raw_recvbuf[comm->recv_buf_len - 1] == CAN_COMM_TAIL)
-            { // 通过校验,复制数据到unpack_data中
+            {
+                // 通过校验,复制数据到unpack_data中
                 crc8 = crc_8(comm->raw_recvbuf + CAN_COMM_SEQ_INDEX, (uint16_t)comm->recv_data_len + 2U);
                 if (comm->raw_recvbuf[comm->recv_buf_len - 2] == crc8)
-                { // 数据量大的话考虑使用DMA
+                {
+                    // 数据量大的话考虑使用DMA
                     if (comm->has_rx_seq != 0U)
                     {
                         expected_seq = (uint8_t)(comm->last_rx_seq + 1U);
@@ -115,8 +117,8 @@ static void CANCommRxCallback(CANInstance *_instance)
                     comm->has_rx_seq = 1U;
 
                     memcpy(comm->unpacked_recv_data, comm->raw_recvbuf + CAN_COMM_DATA_OFFSET, comm->recv_data_len);
-                    comm->update_flag = 1;           // 数据更新flag置为1
-                    comm->lost_logged = 0U;          // 收到合法整包后,允许下一次离线时重新打印告警
+                    comm->update_flag = 1; // 数据更新flag置为1
+                    comm->lost_logged = 0U; // 收到合法整包后,允许下一次离线时重新打印告警
                     DaemonReload(comm->comm_daemon); // 重载daemon,避免数据更新后一直不被读取而导致数据更新不及时
                 }
                 else
@@ -134,9 +136,9 @@ static void CANCommRxCallback(CANInstance *_instance)
     }
 }
 
-static void CANCommLostCallback(void *cancomm)
+static void CANCommLostCallback(void* cancomm)
 {
-    CANCommInstance *comm = (CANCommInstance *)cancomm;
+    CANCommInstance* comm = (CANCommInstance*)cancomm;
 
     if (comm == NULL)
     {
@@ -152,10 +154,10 @@ static void CANCommLostCallback(void *cancomm)
     }
 }
 
-CANCommInstance *CANCommInit(CANComm_Init_Config_s *comm_config)
+CANCommInstance* CANCommInit(CANComm_Init_Config_s* comm_config)
 {
     CAN_Init_Config_s can_config;
-    CANCommInstance *ins;
+    CANCommInstance* ins;
 
     if (comm_config == NULL || comm_config->can_config.can_handle == NULL)
     {
@@ -188,8 +190,8 @@ CANCommInstance *CANCommInit(CANComm_Init_Config_s *comm_config)
     ins->recv_buf_len = comm_config->recv_data_len + CAN_COMM_OFFSET_BYTES; // head + seq + datalen + crc8 + tail
     ins->send_data_len = comm_config->send_data_len;
     ins->send_buf_len = comm_config->send_data_len + CAN_COMM_OFFSET_BYTES;
-    ins->raw_sendbuf[CAN_COMM_HEADER_INDEX] = CAN_COMM_HEADER;          // head,直接设置避免每次发送都要重新赋值,下面的tail同理
-    ins->raw_sendbuf[CAN_COMM_LEN_INDEX] = comm_config->send_data_len;  // datalen
+    ins->raw_sendbuf[CAN_COMM_HEADER_INDEX] = CAN_COMM_HEADER; // head,直接设置避免每次发送都要重新赋值,下面的tail同理
+    ins->raw_sendbuf[CAN_COMM_LEN_INDEX] = comm_config->send_data_len; // datalen
     ins->raw_sendbuf[comm_config->send_data_len + CAN_COMM_OFFSET_BYTES - 1] = CAN_COMM_TAIL;
     // can instance的设置
     can_config = comm_config->can_config;
@@ -204,7 +206,7 @@ CANCommInstance *CANCommInit(CANComm_Init_Config_s *comm_config)
 
     Daemon_Init_Config_s daemon_config = {
         .callback = CANCommLostCallback,
-        .owner_id = (void *)ins,
+        .owner_id = (void*)ins,
         .reload_count = comm_config->daemon_count,
     };
     ins->comm_daemon = DaemonRegister(&daemon_config);
@@ -216,7 +218,7 @@ CANCommInstance *CANCommInit(CANComm_Init_Config_s *comm_config)
     return ins;
 }
 
-uint8_t CANCommSend(CANCommInstance *instance, const uint8_t *data)
+uint8_t CANCommSend(CANCommInstance* instance, const uint8_t* data)
 {
     uint8_t crc8;
     uint8_t send_len;
@@ -241,7 +243,8 @@ uint8_t CANCommSend(CANCommInstance *instance, const uint8_t *data)
 
     // CAN单次发送最大为8字节,如果超过8字节,需要分包发送
     for (size_t i = 0; i < instance->send_buf_len; i += 8)
-    { // 如果是最后一包,send len将会小于8,要修改CAN的txconf中的DLC位,调用bsp_can提供的接口即可
+    {
+        // 如果是最后一包,send len将会小于8,要修改CAN的txconf中的DLC位,调用bsp_can提供的接口即可
         send_len = instance->send_buf_len - i >= 8 ? 8 : instance->send_buf_len - i;
         CANSetDLC(instance->can_ins, send_len);
         memcpy(instance->can_ins->tx_buff, instance->raw_sendbuf + i, send_len);
@@ -254,7 +257,7 @@ uint8_t CANCommSend(CANCommInstance *instance, const uint8_t *data)
     return 1;
 }
 
-uint8_t CANCommGet(CANCommInstance *instance, void *data)
+uint8_t CANCommGet(CANCommInstance* instance, void* data)
 {
     uint8_t has_update;
     int32_t kernel_lock = -1;
@@ -300,7 +303,7 @@ uint8_t CANCommGet(CANCommInstance *instance, void *data)
     return has_update;
 }
 
-uint8_t CANCommIsOnline(CANCommInstance *instance)
+uint8_t CANCommIsOnline(CANCommInstance* instance)
 {
     if (instance == NULL || instance->comm_daemon == NULL)
     {

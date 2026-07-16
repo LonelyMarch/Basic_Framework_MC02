@@ -68,7 +68,8 @@ void RobotAlarmOff(void)
 
 当前工程中 `BuzzerInit()` 在 daemon 任务启动前调用，`BuzzerTask()` 由 daemon 任务以 `100Hz` 周期调用。
 
-`AlarmSetStatus()` 可以被其他任务调用，模块内部会用短临界区保护报警状态写入。`BuzzerTask()` 读取报警状态时也会先取快照，避免任务间读写同一报警状态时出现不一致。
+`AlarmSetStatus()` 可以被其他任务调用，模块内部会用短临界区保护报警状态写入。`BuzzerTask()`
+读取报警状态时也会先取快照，避免任务间读写同一报警状态时出现不一致。
 
 ## 注意事项
 

@@ -71,9 +71,9 @@
 
 typedef struct
 {
-    uint8_t reg;                  // 待配置的BMI088寄存器地址
-    uint8_t data;                 // 写入寄存器的配置值
-    BMI088_ERORR_CODE_e error;    // 该项失败时记录的bit mask错误码
+    uint8_t reg; // 待配置的BMI088寄存器地址
+    uint8_t data; // 写入寄存器的配置值
+    BMI088_ERORR_CODE_e error; // 该项失败时记录的bit mask错误码
 } BMI088_Init_Reg_Config_t;
 
 static BMI088Instance bmi088_instance;
@@ -105,7 +105,10 @@ static const BMI088_Init_Reg_Config_t BMI088_Accel_Base_Init_Table[] =
 // 加速度计触发模式配置表:只有需要DRDY外部中断时才写入。
 static const BMI088_Init_Reg_Config_t BMI088_Accel_Trigger_Init_Table[] =
 {
-    {BMI088_INT1_IO_CTRL, BMI088_ACC_INT1_IO_ENABLE | BMI088_ACC_INT1_GPIO_PP | BMI088_ACC_INT1_GPIO_LOW, BMI088_INT1_IO_CTRL_ERROR},
+    {
+        BMI088_INT1_IO_CTRL, BMI088_ACC_INT1_IO_ENABLE | BMI088_ACC_INT1_GPIO_PP | BMI088_ACC_INT1_GPIO_LOW,
+        BMI088_INT1_IO_CTRL_ERROR
+    },
     {BMI088_INT_MAP_DATA, BMI088_ACC_INT1_DRDY_INTERRUPT, BMI088_INT_MAP_DATA_ERROR},
 };
 
@@ -127,7 +130,10 @@ static const BMI088_Init_Reg_Config_t BMI088_Gyro_Base_Init_Table[] =
 static const BMI088_Init_Reg_Config_t BMI088_Gyro_Trigger_Init_Table[] =
 {
     {BMI088_GYRO_CTRL, BMI088_DRDY_ON, BMI088_GYRO_CTRL_ERROR},
-    {BMI088_GYRO_INT3_INT4_IO_CONF, BMI088_GYRO_INT3_GPIO_PP | BMI088_GYRO_INT3_GPIO_LOW, BMI088_GYRO_INT3_INT4_IO_CONF_ERROR},
+    {
+        BMI088_GYRO_INT3_INT4_IO_CONF, BMI088_GYRO_INT3_GPIO_PP | BMI088_GYRO_INT3_GPIO_LOW,
+        BMI088_GYRO_INT3_INT4_IO_CONF_ERROR
+    },
     {BMI088_GYRO_INT3_INT4_IO_MAP, BMI088_GYRO_DRDY_IO_INT3, BMI088_GYRO_INT3_INT4_IO_MAP_ERROR},
 };
 
@@ -138,19 +144,30 @@ static const BMI088_Init_Reg_Config_t BMI088_Gyro_Periodic_Init_Table[] =
     {BMI088_GYRO_INT3_INT4_IO_MAP, BMI088_GYRO_DRDY_IO_OFF, BMI088_GYRO_INT3_INT4_IO_MAP_ERROR},
 };
 
-static HAL_StatusTypeDef BMI088AccelRead(BMI088Instance *bmi088, uint8_t reg, uint8_t *data, uint8_t len);
-static HAL_StatusTypeDef BMI088GyroRead(BMI088Instance *bmi088, uint8_t reg, uint8_t *data, uint8_t len);
-static HAL_StatusTypeDef BMI088AccelWriteSingleReg(BMI088Instance *bmi088, uint8_t reg, uint8_t data);
-static HAL_StatusTypeDef BMI088GyroWriteSingleReg(BMI088Instance *bmi088, uint8_t reg, uint8_t data);
-static HAL_StatusTypeDef BMI088ReadTemperatureDecimated(BMI088Instance *bmi088, float *temperature);
-static BMI088_ERORR_CODE_e BMI088AccelInit(BMI088Instance *bmi088);
-static BMI088_ERORR_CODE_e BMI088GyroInit(BMI088Instance *bmi088);
-static void BMI088LoadOfflineParams(BMI088Instance *bmi088);
-static void BMI088SnapshotTriggerCounter(BMI088Instance *bmi088,
-                                         uint32_t *acc_drdy_count,
-                                         uint32_t *gyro_drdy_count,
-                                         uint32_t *acc_read_count,
-                                         uint32_t *gyro_read_count);
+
+static HAL_StatusTypeDef BMI088AccelRead(BMI088Instance* bmi088, uint8_t reg, uint8_t* data, uint8_t len);
+
+
+static HAL_StatusTypeDef BMI088GyroRead(BMI088Instance* bmi088, uint8_t reg, uint8_t* data, uint8_t len);
+
+
+static HAL_StatusTypeDef BMI088AccelWriteSingleReg(BMI088Instance* bmi088, uint8_t reg, uint8_t data);
+
+
+static HAL_StatusTypeDef BMI088GyroWriteSingleReg(BMI088Instance* bmi088, uint8_t reg, uint8_t data);
+
+
+static HAL_StatusTypeDef BMI088ReadTemperatureDecimated(BMI088Instance* bmi088, float* temperature);
+
+
+static BMI088_ERORR_CODE_e BMI088AccelInit(BMI088Instance * bmi088);
+static BMI088_ERORR_CODE_e BMI088GyroInit(BMI088Instance * bmi088);
+static void BMI088LoadOfflineParams(BMI088Instance * bmi088);
+static void BMI088SnapshotTriggerCounter(BMI088Instance * bmi088,
+                                         uint32_t * acc_drdy_count,
+                                         uint32_t * gyro_drdy_count,
+                                         uint32_t * acc_read_count,
+                                         uint32_t * gyro_read_count);
 
 /**
  * @brief 限频记录运行期读取失败
@@ -158,7 +175,7 @@ static void BMI088SnapshotTriggerCounter(BMI088Instance *bmi088,
  * INS任务通常1kHz运行,如果SPI持续异常,每次都打印日志会进一步拖慢系统。
  * 因此前10次全部打印,之后每1000次打印一次。
  */
-static void BMI088LogReadFailure(const char *op, HAL_StatusTypeDef status)
+static void BMI088LogReadFailure(const char* op, HAL_StatusTypeDef status)
 {
     static uint32_t fail_count = 0U;
 
@@ -178,7 +195,7 @@ static void BMI088LogReadFailure(const char *op, HAL_StatusTypeDef status)
  * BMI088加速度计SPI读时,地址字节后需要额外1个dummy byte,
  * 因此总传输长度为len + 2,有效数据从rx[2]开始。
  */
-static HAL_StatusTypeDef BMI088AccelRead(BMI088Instance *bmi088, uint8_t reg, uint8_t *data, uint8_t len)
+static HAL_StatusTypeDef BMI088AccelRead(BMI088Instance* bmi088, uint8_t reg, uint8_t* data, uint8_t len)
 {
     uint8_t tx[8];
     uint8_t rx[8] = {0};
@@ -207,7 +224,7 @@ static HAL_StatusTypeDef BMI088AccelRead(BMI088Instance *bmi088, uint8_t reg, ui
  * BMI088陀螺仪SPI读时只有地址字节这1个dummy阶段,
  * 因此总传输长度为len + 1,有效数据从rx[1]开始。
  */
-static HAL_StatusTypeDef BMI088GyroRead(BMI088Instance *bmi088, uint8_t reg, uint8_t *data, uint8_t len)
+static HAL_StatusTypeDef BMI088GyroRead(BMI088Instance* bmi088, uint8_t reg, uint8_t* data, uint8_t len)
 {
     uint8_t tx[9];
     uint8_t rx[9] = {0};
@@ -230,7 +247,7 @@ static HAL_StatusTypeDef BMI088GyroRead(BMI088Instance *bmi088, uint8_t reg, uin
     return status;
 }
 
-static HAL_StatusTypeDef BMI088AccelWriteSingleReg(BMI088Instance *bmi088, uint8_t reg, uint8_t data)
+static HAL_StatusTypeDef BMI088AccelWriteSingleReg(BMI088Instance* bmi088, uint8_t reg, uint8_t data)
 {
     uint8_t tx[2] = {reg, data};
 
@@ -242,7 +259,7 @@ static HAL_StatusTypeDef BMI088AccelWriteSingleReg(BMI088Instance *bmi088, uint8
     return SPITransmit(bmi088->spi_acc, tx, sizeof(tx));
 }
 
-static HAL_StatusTypeDef BMI088GyroWriteSingleReg(BMI088Instance *bmi088, uint8_t reg, uint8_t data)
+static HAL_StatusTypeDef BMI088GyroWriteSingleReg(BMI088Instance* bmi088, uint8_t reg, uint8_t data)
 {
     uint8_t tx[2] = {reg, data};
 
@@ -276,7 +293,7 @@ static float BMI088DecodeTemperature(const uint8_t temp_buf[2])
     return (float)raw_temp * BMI088_TEMP_FACTOR + BMI088_TEMP_OFFSET;
 }
 
-static void BMI088DecodeAccel(BMI088Instance *bmi088, const uint8_t buf[6], float acc[3])
+static void BMI088DecodeAccel(BMI088Instance* bmi088, const uint8_t buf[6], float acc[3])
 {
     for (uint8_t i = 0U; i < 3U; i++)
     {
@@ -285,7 +302,7 @@ static void BMI088DecodeAccel(BMI088Instance *bmi088, const uint8_t buf[6], floa
     }
 }
 
-static void BMI088DecodeGyro(BMI088Instance *bmi088, const uint8_t buf[6], float gyro[3])
+static void BMI088DecodeGyro(BMI088Instance* bmi088, const uint8_t buf[6], float gyro[3])
 {
     for (uint8_t i = 0U; i < 3U; i++)
     {
@@ -294,7 +311,7 @@ static void BMI088DecodeGyro(BMI088Instance *bmi088, const uint8_t buf[6], float
     }
 }
 
-static void BMI088StoreData(BMI088Instance *bmi088, const BMI088_Data_t *data)
+static void BMI088StoreData(BMI088Instance* bmi088, const BMI088_Data_t* data)
 {
     bmi088->acc[0] = data->acc[0];
     bmi088->acc[1] = data->acc[1];
@@ -305,7 +322,7 @@ static void BMI088StoreData(BMI088Instance *bmi088, const BMI088_Data_t *data)
     bmi088->temperature = data->temperature;
 }
 
-static void BMI088SetDefaultScale(BMI088Instance *bmi088)
+static void BMI088SetDefaultScale(BMI088Instance* bmi088)
 {
     bmi088->BMI088_ACCEL_SEN = BMI088_ACCEL_6G_SEN;
     bmi088->BMI088_GYRO_SEN = BMI088_GYRO_2000_SEN;
@@ -317,7 +334,7 @@ static void BMI088SetDefaultScale(BMI088Instance *bmi088)
     memset(bmi088->gyro_offset, 0, sizeof(bmi088->gyro_offset));
 }
 
-static void BMI088LoadOfflineParams(BMI088Instance *bmi088)
+static void BMI088LoadOfflineParams(BMI088Instance* bmi088)
 {
     if (bmi088 == NULL)
     {
@@ -334,11 +351,11 @@ static void BMI088LoadOfflineParams(BMI088Instance *bmi088)
     bmi088->temp_read_count = BMI088_TEMP_UPDATE_DIVIDER - 1U;
 }
 
-static void BMI088SnapshotTriggerCounter(BMI088Instance *bmi088,
-                                         uint32_t *acc_drdy_count,
-                                         uint32_t *gyro_drdy_count,
-                                         uint32_t *acc_read_count,
-                                         uint32_t *gyro_read_count)
+static void BMI088SnapshotTriggerCounter(BMI088Instance* bmi088,
+                                         uint32_t* acc_drdy_count,
+                                         uint32_t* gyro_drdy_count,
+                                         uint32_t* acc_read_count,
+                                         uint32_t* gyro_read_count)
 {
     uint32_t primask;
 
@@ -367,7 +384,7 @@ static void BMI088SnapshotTriggerCounter(BMI088Instance *bmi088,
     __set_PRIMASK(primask);
 }
 
-static BMI088_ERORR_CODE_e BMI088AccelInit(BMI088Instance *bmi088)
+static BMI088_ERORR_CODE_e BMI088AccelInit(BMI088Instance* bmi088)
 {
     uint8_t whoami = 0U;
     BMI088_ERORR_CODE_e error = BMI088_NO_ERROR;
@@ -453,10 +470,14 @@ static BMI088_ERORR_CODE_e BMI088AccelInit(BMI088Instance *bmi088)
      * 周期模式不需要BMI088输出DRDY到外部中断脚;触发模式才打开DRDY映射。
      * 这里显式写关闭配置,可以避免上一次固件/运行模式残留导致周期模式仍然产生EXTI。
      */
-    const BMI088_Init_Reg_Config_t *mode_table =
-        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE) ? BMI088_Accel_Trigger_Init_Table : BMI088_Accel_Periodic_Init_Table;
+    const BMI088_Init_Reg_Config_t* mode_table =
+        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE)
+            ? BMI088_Accel_Trigger_Init_Table
+            : BMI088_Accel_Periodic_Init_Table;
     const size_t mode_table_len =
-        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE) ? BMI088_ARRAY_LEN(BMI088_Accel_Trigger_Init_Table) : BMI088_ARRAY_LEN(BMI088_Accel_Periodic_Init_Table);
+        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE)
+            ? BMI088_ARRAY_LEN(BMI088_Accel_Trigger_Init_Table)
+            : BMI088_ARRAY_LEN(BMI088_Accel_Periodic_Init_Table);
 
     for (size_t i = 0U; i < mode_table_len; i++)
     {
@@ -495,7 +516,7 @@ static BMI088_ERORR_CODE_e BMI088AccelInit(BMI088Instance *bmi088)
     return error;
 }
 
-static BMI088_ERORR_CODE_e BMI088GyroInit(BMI088Instance *bmi088)
+static BMI088_ERORR_CODE_e BMI088GyroInit(BMI088Instance* bmi088)
 {
     uint8_t whoami = 0U;
     BMI088_ERORR_CODE_e error = BMI088_NO_ERROR;
@@ -577,10 +598,14 @@ static BMI088_ERORR_CODE_e BMI088GyroInit(BMI088Instance *bmi088)
      * 陀螺仪DRDY需要先由GYRO_CTRL打开,再映射到INT3/INT4。
      * 周期模式下反向写入关闭配置,让BMI088不再主动打断MCU。
      */
-    const BMI088_Init_Reg_Config_t *mode_table =
-        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE) ? BMI088_Gyro_Trigger_Init_Table : BMI088_Gyro_Periodic_Init_Table;
+    const BMI088_Init_Reg_Config_t* mode_table =
+        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE)
+            ? BMI088_Gyro_Trigger_Init_Table
+            : BMI088_Gyro_Periodic_Init_Table;
     const size_t mode_table_len =
-        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE) ? BMI088_ARRAY_LEN(BMI088_Gyro_Trigger_Init_Table) : BMI088_ARRAY_LEN(BMI088_Gyro_Periodic_Init_Table);
+        (bmi088->work_mode == BMI088_BLOCK_TRIGGER_MODE)
+            ? BMI088_ARRAY_LEN(BMI088_Gyro_Trigger_Init_Table)
+            : BMI088_ARRAY_LEN(BMI088_Gyro_Periodic_Init_Table);
 
     for (size_t i = 0U; i < mode_table_len; i++)
     {
@@ -619,7 +644,7 @@ static BMI088_ERORR_CODE_e BMI088GyroInit(BMI088Instance *bmi088)
     return error;
 }
 
-static void BMI088MarkAccReady(BMI088Instance *bmi088)
+static void BMI088MarkAccReady(BMI088Instance* bmi088)
 {
     uint32_t primask;
 
@@ -644,7 +669,7 @@ static void BMI088MarkAccReady(BMI088Instance *bmi088)
     __set_PRIMASK(primask);
 }
 
-static void BMI088MarkGyroReady(BMI088Instance *bmi088)
+static void BMI088MarkGyroReady(BMI088Instance* bmi088)
 {
     uint32_t primask;
 
@@ -666,7 +691,7 @@ static void BMI088MarkGyroReady(BMI088Instance *bmi088)
     __set_PRIMASK(primask);
 }
 
-static void BMI088FinishAccRead(BMI088Instance *bmi088, uint32_t handled_count)
+static void BMI088FinishAccRead(BMI088Instance* bmi088, uint32_t handled_count)
 {
     uint32_t primask;
 
@@ -684,12 +709,14 @@ static void BMI088FinishAccRead(BMI088Instance *bmi088, uint32_t handled_count)
         bmi088->update_flag.acc = 0U;
         bmi088->update_flag.acc_overrun = 0U;
     }
-    bmi088->update_flag.imu_ready = (bmi088->update_flag.acc || bmi088->update_flag.gyro || bmi088->update_flag.temp) ? 1U : 0U;
+    bmi088->update_flag.imu_ready = (bmi088->update_flag.acc || bmi088->update_flag.gyro || bmi088->update_flag.temp)
+                                        ? 1U
+                                        : 0U;
 
     __set_PRIMASK(primask);
 }
 
-static void BMI088FinishGyroRead(BMI088Instance *bmi088, uint32_t handled_count)
+static void BMI088FinishGyroRead(BMI088Instance* bmi088, uint32_t handled_count)
 {
     uint32_t primask;
 
@@ -707,28 +734,30 @@ static void BMI088FinishGyroRead(BMI088Instance *bmi088, uint32_t handled_count)
         bmi088->update_flag.gyro = 0U;
         bmi088->update_flag.gyro_overrun = 0U;
     }
-    bmi088->update_flag.imu_ready = (bmi088->update_flag.acc || bmi088->update_flag.gyro || bmi088->update_flag.temp) ? 1U : 0U;
+    bmi088->update_flag.imu_ready = (bmi088->update_flag.acc || bmi088->update_flag.gyro || bmi088->update_flag.temp)
+                                        ? 1U
+                                        : 0U;
 
     __set_PRIMASK(primask);
 }
 
-static void BMI088AccINTCallback(GPIOInstance *gpio)
+static void BMI088AccINTCallback(GPIOInstance* gpio)
 {
     if (gpio != NULL)
     {
-        BMI088MarkAccReady((BMI088Instance *)gpio->id);
+        BMI088MarkAccReady((BMI088Instance*)gpio->id);
     }
 }
 
-static void BMI088GyroINTCallback(GPIOInstance *gpio)
+static void BMI088GyroINTCallback(GPIOInstance* gpio)
 {
     if (gpio != NULL)
     {
-        BMI088MarkGyroReady((BMI088Instance *)gpio->id);
+        BMI088MarkGyroReady((BMI088Instance*)gpio->id);
     }
 }
 
-static HAL_StatusTypeDef BMI088ReadAccelData(BMI088Instance *bmi088, float acc[3])
+static HAL_StatusTypeDef BMI088ReadAccelData(BMI088Instance* bmi088, float acc[3])
 {
     uint8_t rx[8] = {0};
     HAL_StatusTypeDef status;
@@ -751,7 +780,7 @@ static HAL_StatusTypeDef BMI088ReadAccelData(BMI088Instance *bmi088, float acc[3
     return status;
 }
 
-static HAL_StatusTypeDef BMI088ReadGyroData(BMI088Instance *bmi088, float gyro[3])
+static HAL_StatusTypeDef BMI088ReadGyroData(BMI088Instance* bmi088, float gyro[3])
 {
     uint8_t rx[7] = {0};
     HAL_StatusTypeDef status;
@@ -774,7 +803,7 @@ static HAL_StatusTypeDef BMI088ReadGyroData(BMI088Instance *bmi088, float gyro[3
     return status;
 }
 
-static HAL_StatusTypeDef BMI088ReadTemperature(BMI088Instance *bmi088, float *temperature)
+static HAL_StatusTypeDef BMI088ReadTemperature(BMI088Instance* bmi088, float* temperature)
 {
     uint8_t buf[2] = {0};
     HAL_StatusTypeDef status;
@@ -801,7 +830,7 @@ static HAL_StatusTypeDef BMI088ReadTemperature(BMI088Instance *bmi088, float *te
  * BMI088_TEMP_UPDATE_DIVIDER 次采样才真正访问一次温度寄存器,
  * 其余周期沿用最近一次有效温度,从而缩短BMI088Acquire()的常规耗时。
  */
-static HAL_StatusTypeDef BMI088ReadTemperatureDecimated(BMI088Instance *bmi088, float *temperature)
+static HAL_StatusTypeDef BMI088ReadTemperatureDecimated(BMI088Instance* bmi088, float* temperature)
 {
     if (bmi088 == NULL || temperature == NULL)
     {
@@ -825,7 +854,7 @@ static HAL_StatusTypeDef BMI088ReadTemperatureDecimated(BMI088Instance *bmi088, 
     return status;
 }
 
-uint8_t BMI088Acquire(BMI088Instance *bmi088, BMI088_Data_t *data_store)
+uint8_t BMI088Acquire(BMI088Instance* bmi088, BMI088_Data_t* data_store)
 {
     HAL_StatusTypeDef status;
 
@@ -963,7 +992,7 @@ uint8_t BMI088Acquire(BMI088Instance *bmi088, BMI088_Data_t *data_store)
     return 0U;
 }
 
-void BMI088CalibrateIMU(BMI088Instance *bmi088)
+void BMI088CalibrateIMU(BMI088Instance* bmi088)
 {
     BMI088_Work_Mode_e saved_mode;
     float start_time;
@@ -1141,13 +1170,15 @@ void BMI088CalibrateIMU(BMI088Instance *bmi088)
             return;
         }
 
-        LOGWARNING("[bmi088] calibration candidate rejected: g_norm_milli=%ld, g_diff_milli=%ld, gyro_offset_uradps=[%ld,%ld,%ld]",
-                   (long)(candidate_g_norm * 1000.0f),
-                   (long)(g_norm_diff * 1000.0f),
-                   (long)(candidate_gyro_offset[0] * 1000000.0f),
-                   (long)(candidate_gyro_offset[1] * 1000000.0f),
-                   (long)(candidate_gyro_offset[2] * 1000000.0f));
-    } while (bmi088->cali_mode == BMI088_CALIBRATE_ONLINE_MODE);
+        LOGWARNING(
+            "[bmi088] calibration candidate rejected: g_norm_milli=%ld, g_diff_milli=%ld, gyro_offset_uradps=[%ld,%ld,%ld]",
+            (long)(candidate_g_norm * 1000.0f),
+            (long)(g_norm_diff * 1000.0f),
+            (long)(candidate_gyro_offset[0] * 1000000.0f),
+            (long)(candidate_gyro_offset[1] * 1000000.0f),
+            (long)(candidate_gyro_offset[2] * 1000000.0f));
+    }
+    while (bmi088->cali_mode == BMI088_CALIBRATE_ONLINE_MODE);
 
     if (bmi088->cali_mode == BMI088_LOAD_PRE_CALI_MODE)
     {
@@ -1158,7 +1189,7 @@ void BMI088CalibrateIMU(BMI088Instance *bmi088)
     bmi088->work_mode = saved_mode;
 }
 
-BMI088Instance *BMI088Register(BMI088_Init_Config_s *config)
+BMI088Instance* BMI088Register(BMI088_Init_Config_s* config)
 {
     BMI088_ERORR_CODE_e error = BMI088_NO_ERROR;
 

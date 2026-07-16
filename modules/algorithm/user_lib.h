@@ -39,7 +39,10 @@ typedef arm_matrix_instance_f32 mat;
 #define MatMultiply arm_mat_mult_f32
 #define MatTranspose arm_mat_trans_f32
 #define MatInverse arm_mat_inverse_f32
-void MatInit(mat *m, uint8_t row, uint8_t col);
+
+
+void MatInit(mat* m, uint8_t row, uint8_t col);
+
 
 /* boolean type definitions */
 #ifndef TRUE
@@ -85,37 +88,60 @@ void MatInit(mat *m, uint8_t row, uint8_t col);
 #define VAL_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define VAL_MAX(a, b) ((a) > (b) ? (a) : (b))
 
+
 /* 申请并清零一块内存,返回值仍需要由调用者转换为目标类型。 */
-void *zmalloc(size_t size);
+void* zmalloc(size_t size);
+
 
 // 快速开方
 float Sqrt(float x);
+
+
 // 绝对值限幅
 float abs_limit(float num, float Limit);
+
+
 // 符号判断
 float sign(float value);
+
+
 // 浮点死区
 float float_deadband(float Value, float minValue, float maxValue);
+
+
 // 浮点限幅
 float float_constrain(float Value, float minValue, float maxValue);
+
+
 // int16限幅
 int16_t int16_constrain(int16_t Value, int16_t minValue, int16_t maxValue);
+
+
 // 循环限幅
 float loop_float_constrain(float Input, float minValue, float maxValue);
+
+
 // 角度格式化到 -180 ~ 180
 float theta_format(float Ang);
 
+
 int float_rounding(float raw);
 
-float *Norm3d(float *v);
 
-float NormOf3d(float *v);
+float* Norm3d(float* v);
 
-void Cross3d(float *v1, float *v2, float *res);
 
-float Dot3d(float *v1, float *v2);
+float NormOf3d(float* v);
 
-float AverageFilter(float new_data, float *buf, uint8_t len);
+
+void Cross3d(float* v1, float* v2, float* res);
+
+
+float Dot3d(float* v1, float* v2);
+
+
+float AverageFilter(float new_data, float* buf, uint8_t len);
+
 
 #define rad_format(Ang) loop_float_constrain((Ang), -PI, PI)
 

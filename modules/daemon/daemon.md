@@ -2,7 +2,8 @@
 
 `daemon` 是 module 层的在线检测组件,用于判断遥控器、电机、裁判系统、视觉、超级电容、板间通信等模块是否长时间没有收到有效反馈。
 
-模块收到合法反馈、完成一次有效通信或确认设备仍在线时,调用 `DaemonReload()` 喂狗。若计数递减到 0,`DaemonTask()` 会认为该模块离线,并调用注册时传入的离线回调函数。
+模块收到合法反馈、完成一次有效通信或确认设备仍在线时,调用 `DaemonReload()` 喂狗。若计数递减到 0,`DaemonTask()`
+会认为该模块离线,并调用注册时传入的离线回调函数。
 
 ## 初始化
 
@@ -93,7 +94,8 @@ callback 不建议做:
 
 ## @TODO
 
-后续可以把 daemon 离线状态接入 `modules/alarm` 的分级报警机制。推荐做法不是让 `daemon.c` 直接依赖蜂鸣器模块,而是由 application 层或各模块离线 callback 根据模块重要程度调用 `AlarmSetStatus()`。
+后续可以把 daemon 离线状态接入 `modules/alarm` 的分级报警机制。推荐做法不是让 `daemon.c` 直接依赖蜂鸣器模块,而是由
+application 层或各模块离线 callback 根据模块重要程度调用 `AlarmSetStatus()`。
 
 例如:
 
@@ -134,4 +136,4 @@ void DaemonTask(void);
 
 ### DaemonTask
 
-由 application 层 daemon 任务周期调用。当前工程中 `StartDAEMONTASK()` 使用 `osDelayUntil()` 按 `DAEMON_TASK_PERIOD_MS` 调度,并避免系统繁忙后连续补跑历史周期。
+由 application 层 daemon 任务周期调用。当前工程中 `application/robot_task.c` 创建 `daemon_task`，使用 `osDelay(DAEMON_TASK_PERIOD_MS)` 维持默认 100 Hz 调度。当前 APP 未注册具体业务实例时，该任务只保留运行框架。

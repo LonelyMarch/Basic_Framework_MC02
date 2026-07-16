@@ -62,29 +62,57 @@ typedef struct
     char text[LCD_PRINTF_BUFFER_SIZE];
 } LCDCommand_s;
 
-static SPIInstance *lcd_spi;
-static GPIOInstance *lcd_dc;
-static GPIOInstance *lcd_res;
-static GPIOInstance *lcd_blk;
+static SPIInstance* lcd_spi;
+static GPIOInstance* lcd_dc;
+static GPIOInstance* lcd_res;
+static GPIOInstance* lcd_blk;
 static osMutexId_t lcd_mutex;
 static osMessageQueueId_t lcd_cmd_queue;
 static osThreadId_t lcd_task_handle;
 static uint8_t lcd_is_ready;
 static uint8_t lcd_tx_buffer[LCD_TX_CHUNK_SIZE];
 
+
 static HAL_StatusTypeDef LCDEnsureHardware(void);
-static HAL_StatusTypeDef LCDPostCommand(const LCDCommand_s *cmd);
-static void LCDTask(void *argument);
+
+
+static HAL_StatusTypeDef LCDPostCommand(const LCDCommand_s* cmd);
+
+
+static void LCDTask(void* argument);
+
+
 static HAL_StatusTypeDef LCDWriteCommandUnlocked(uint8_t cmd);
+
+
 static HAL_StatusTypeDef LCDWriteData8Unlocked(uint8_t data);
+
+
 static HAL_StatusTypeDef LCDWriteData16Unlocked(uint16_t data);
-static HAL_StatusTypeDef LCDWriteDataBufferUnlocked(const uint8_t *data, uint32_t len);
+
+
+static HAL_StatusTypeDef LCDWriteDataBufferUnlocked(const uint8_t* data, uint32_t len);
+
+
 static void LCDAddressSetUnlocked(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
+
+
 static void LCDFillUnlocked(uint16_t xsta, uint16_t ysta, uint16_t xend, uint16_t yend, uint16_t color);
+
+
 static void LCDDrawAxisLineUnlocked(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
+
+
 static void LCDDrawPointUnlocked(uint16_t x, uint16_t y, uint16_t color);
-static void LCDShowCharUnlocked(uint16_t x, uint16_t y, uint8_t num, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
-static void LCDShowStringUnlocked(uint16_t x, uint16_t y, const uint8_t *p, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode);
+
+
+static void LCDShowCharUnlocked(uint16_t x, uint16_t y, uint8_t num, uint16_t fc, uint16_t bc, uint8_t sizey,
+                                uint8_t mode);
+
+
+static void LCDShowStringUnlocked(uint16_t x, uint16_t y, const uint8_t* p, uint16_t fc, uint16_t bc, uint8_t sizey,
+                                  uint8_t mode);
+
 
 /**
  * @brief 根据调度器状态选择延时方式。
@@ -172,7 +200,7 @@ static void LCDUnlock(void)
  * 异步接口只适合在 FreeRTOS 调度器启动后使用。队列满时直接返回 HAL_BUSY，
  * 避免调试显示反向阻塞控制、IMU、CAN 等高实时性任务。
  */
-static HAL_StatusTypeDef LCDPostCommand(const LCDCommand_s *cmd)
+static HAL_StatusTypeDef LCDPostCommand(const LCDCommand_s* cmd)
 {
     if (cmd == NULL || lcd_cmd_queue == NULL || osKernelGetState() != osKernelRunning)
     {
@@ -198,7 +226,7 @@ static HAL_StatusTypeDef LCDPostCommand(const LCDCommand_s *cmd)
  * 其他任务通过 LCD_AsyncXXX() 投递命令，本任务串行执行真正的 SPI 刷屏。
  * 这样大面积刷新只会占用 LCDTask，不会把调用者任务卡在 SPI 传输上。
  */
-static void LCDTask(void *argument)
+static void LCDTask(void* argument)
 {
     LCDCommand_s cmd;
 
@@ -231,7 +259,7 @@ static void LCDTask(void *argument)
         case LCD_CMD_PRINTF:
             LCD_ShowString(cmd.x1,
                            cmd.y1,
-                           (const uint8_t *)cmd.text,
+                           (const uint8_t*)cmd.text,
                            cmd.color,
                            cmd.bg_color,
                            cmd.sizey,
@@ -244,7 +272,7 @@ static void LCDTask(void *argument)
     }
 }
 
-static void LCDGpioSet(GPIOInstance *gpio)
+static void LCDGpioSet(GPIOInstance* gpio)
 {
     if (gpio != NULL)
     {
@@ -252,7 +280,7 @@ static void LCDGpioSet(GPIOInstance *gpio)
     }
 }
 
-static void LCDGpioReset(GPIOInstance *gpio)
+static void LCDGpioReset(GPIOInstance* gpio)
 {
     if (gpio != NULL)
     {
@@ -340,7 +368,7 @@ static HAL_StatusTypeDef LCDEnsureHardware(void)
     return HAL_OK;
 }
 
-static HAL_StatusTypeDef LCDSpiTransmitUnlocked(const uint8_t *data, uint16_t len)
+static HAL_StatusTypeDef LCDSpiTransmitUnlocked(const uint8_t* data, uint16_t len)
 {
     HAL_StatusTypeDef status;
 
@@ -349,7 +377,7 @@ static HAL_StatusTypeDef LCDSpiTransmitUnlocked(const uint8_t *data, uint16_t le
         return HAL_ERROR;
     }
 
-    status = SPITransmit(lcd_spi, (uint8_t *)data, len);
+    status = SPITransmit(lcd_spi, (uint8_t*)data, len);
     if (status != HAL_OK)
     {
         LOGERROR("[lcd] SPI写入失败: status=%u", (unsigned int)status);
@@ -381,7 +409,7 @@ static HAL_StatusTypeDef LCDWriteData16Unlocked(uint16_t data)
     return LCDSpiTransmitUnlocked(tx, sizeof(tx));
 }
 
-static HAL_StatusTypeDef LCDWriteDataBufferUnlocked(const uint8_t *data, uint32_t len)
+static HAL_StatusTypeDef LCDWriteDataBufferUnlocked(const uint8_t* data, uint32_t len)
 {
     HAL_StatusTypeDef status = HAL_OK;
     uint16_t tx_len;
@@ -430,7 +458,7 @@ static void LCDWriteColorBurstUnlocked(uint16_t color, uint32_t pixel_count)
     }
 }
 
-static void LCDColorStreamAppend(uint16_t color, uint16_t *buffer_len)
+static void LCDColorStreamAppend(uint16_t color, uint16_t* buffer_len)
 {
     if ((*buffer_len + 2U) > LCD_TX_CHUNK_SIZE)
     {
@@ -443,7 +471,7 @@ static void LCDColorStreamAppend(uint16_t color, uint16_t *buffer_len)
     *buffer_len += 2U;
 }
 
-static void LCDColorStreamFlush(uint16_t *buffer_len)
+static void LCDColorStreamFlush(uint16_t* buffer_len)
 {
     if (*buffer_len > 0U)
     {
@@ -570,7 +598,7 @@ static void LCDDrawAxisLineUnlocked(uint16_t x1, uint16_t y1, uint16_t x2, uint1
     }
 }
 
-static const uint8_t *LCDGetAsciiFont(uint8_t num, uint8_t sizey, uint8_t *sizex, uint16_t *pixel_count)
+static const uint8_t* LCDGetAsciiFont(uint8_t num, uint8_t sizey, uint8_t* sizex, uint16_t* pixel_count)
 {
     if (num < LCD_ASCII_FIRST_CHAR || num > LCD_ASCII_LAST_CHAR)
     {
@@ -605,7 +633,7 @@ static void LCDRenderBitmapFontUnlocked(uint16_t x,
                                         uint16_t y,
                                         uint8_t width,
                                         uint8_t height,
-                                        const uint8_t *bitmap,
+                                        const uint8_t* bitmap,
                                         uint16_t bitmap_bytes,
                                         uint16_t fc,
                                         uint16_t bc,
@@ -670,9 +698,10 @@ static void LCDRenderBitmapFontUnlocked(uint16_t x,
  * 高层字符串/数字接口会一次加锁后连续绘制多个字符，避免多任务同时输出时
  * 字符之间互相穿插；单字符公开接口也复用该函数，保持绘制逻辑只有一份。
  */
-static void LCDShowCharUnlocked(uint16_t x, uint16_t y, uint8_t num, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+static void LCDShowCharUnlocked(uint16_t x, uint16_t y, uint8_t num, uint16_t fc, uint16_t bc, uint8_t sizey,
+                                uint8_t mode)
 {
-    const uint8_t *font;
+    const uint8_t* font;
     uint8_t sizex = 0U;
     uint16_t pixel_count = 0U;
     uint16_t font_bytes;
@@ -690,7 +719,8 @@ static void LCDShowCharUnlocked(uint16_t x, uint16_t y, uint8_t num, uint16_t fc
 /**
  * @brief 在已持有 LCD 锁时绘制 ASCII 字符串。
  */
-static void LCDShowStringUnlocked(uint16_t x, uint16_t y, const uint8_t *p, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+static void LCDShowStringUnlocked(uint16_t x, uint16_t y, const uint8_t* p, uint16_t fc, uint16_t bc, uint8_t sizey,
+                                  uint8_t mode)
 {
     uint8_t sizex = sizey / 2U;
 
@@ -737,9 +767,9 @@ static uint32_t LCDPow10(uint8_t n)
  * GBK 索引的轻量映射，保证 LCD_ShowChinese(..., "达妙", ...) 这类
  * UTF-8 字符串也能命中字库。若传入本来就是 GBK 两字节字符串，则直接透传。
  */
-static uint8_t LCDDecodeChineseIndex(const uint8_t **text, uint8_t index[2])
+static uint8_t LCDDecodeChineseIndex(const uint8_t** text, uint8_t index[2])
 {
-    const uint8_t *p;
+    const uint8_t* p;
 
     if (text == NULL || *text == NULL || index == NULL)
     {
@@ -911,7 +941,8 @@ HAL_StatusTypeDef LCD_Init(void)
         {
             lcd_is_ready = 1U;
         }
-    } while (0);
+    }
+    while (0);
 
     LCDUnlock();
     return status;
@@ -1244,7 +1275,7 @@ void LCD_ShowChar(uint16_t x, uint16_t y, uint8_t num, uint16_t fc, uint16_t bc,
     LCDUnlock();
 }
 
-void LCD_ShowString(uint16_t x, uint16_t y, const uint8_t *p, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+void LCD_ShowString(uint16_t x, uint16_t y, const uint8_t* p, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
 {
     if (LCDLock() != HAL_OK)
     {
@@ -1262,10 +1293,10 @@ void LCD_ShowString(uint16_t x, uint16_t y, const uint8_t *p, uint16_t fc, uint1
     LCDUnlock();
 }
 
-void LCD_ShowChinese(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+void LCD_ShowChinese(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
 {
     uint8_t index[2];
-    const uint8_t *text = s;
+    const uint8_t* text = s;
 
     if (s == NULL)
     {
@@ -1301,7 +1332,8 @@ void LCD_ShowChinese(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint
     }
 }
 
-void LCD_ShowChinese12x12(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+void LCD_ShowChinese12x12(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode)
 {
     (void)sizey;
     if (LCDLock() != HAL_OK)
@@ -1328,7 +1360,8 @@ void LCD_ShowChinese12x12(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc,
     LCDUnlock();
 }
 
-void LCD_ShowChinese16x16(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+void LCD_ShowChinese16x16(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode)
 {
     (void)sizey;
     if (LCDLock() != HAL_OK)
@@ -1355,7 +1388,8 @@ void LCD_ShowChinese16x16(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc,
     LCDUnlock();
 }
 
-void LCD_ShowChinese24x24(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+void LCD_ShowChinese24x24(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode)
 {
     (void)sizey;
     if (LCDLock() != HAL_OK)
@@ -1382,7 +1416,8 @@ void LCD_ShowChinese24x24(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc,
     LCDUnlock();
 }
 
-void LCD_ShowChinese32x32(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode)
+void LCD_ShowChinese32x32(uint16_t x, uint16_t y, const uint8_t* s, uint16_t fc, uint16_t bc, uint8_t sizey,
+                          uint8_t mode)
 {
     (void)sizey;
     if (LCDLock() != HAL_OK)
@@ -1435,14 +1470,16 @@ void LCD_ShowIntNum(uint16_t x, uint16_t y, uint16_t num, uint8_t len, uint16_t 
         else
         {
             started = 1U;
-            LCDShowCharUnlocked((uint16_t)(x + t * sizex), y, (uint8_t)(digit + '0'), fc, bc, sizey, LCD_TEXT_MODE_NORMAL);
+            LCDShowCharUnlocked((uint16_t)(x + t * sizex), y, (uint8_t)(digit + '0'), fc, bc, sizey,
+                                LCD_TEXT_MODE_NORMAL);
         }
     }
 
     LCDUnlock();
 }
 
-void LCD_ShowFloatNum(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc, uint8_t sizey)
+void LCD_ShowFloatNum(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc,
+                      uint8_t sizey)
 {
     uint8_t sizex = sizey / 2U;
     int display_len = (len > LCD_FLOAT_INT_WIDTH_MAX) ? (int)LCD_FLOAT_INT_WIDTH_MAX : (int)len;
@@ -1511,13 +1548,14 @@ void LCD_ShowFloatNum(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t de
     if (LCDEnsureHardware() == HAL_OK && lcd_is_ready != 0U)
     {
         LCDFillUnlocked(x, y, (uint16_t)(x + strlen(text) * sizex), (uint16_t)(y + sizey), bc);
-        LCDShowStringUnlocked(x, y, (const uint8_t *)text, fc, bc, sizey, LCD_TEXT_MODE_NORMAL);
+        LCDShowStringUnlocked(x, y, (const uint8_t*)text, fc, bc, sizey, LCD_TEXT_MODE_NORMAL);
     }
 
     LCDUnlock();
 }
 
-void LCD_ShowFloatNum1(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc, uint8_t sizey)
+void LCD_ShowFloatNum1(uint16_t x, uint16_t y, float num, uint8_t len, uint8_t decimal, uint16_t fc, uint16_t bc,
+                       uint8_t sizey)
 {
     if (num < 0.0f)
     {
@@ -1562,7 +1600,7 @@ void LCD_ShowPicture(uint16_t x, uint16_t y, uint16_t length, uint16_t width, co
     LCDUnlock();
 }
 
-void LCD_Printf(uint16_t x, uint16_t y, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode, const char *fmt, ...)
+void LCD_Printf(uint16_t x, uint16_t y, uint16_t fc, uint16_t bc, uint8_t sizey, uint8_t mode, const char* fmt, ...)
 {
     char buffer[LCD_PRINTF_BUFFER_SIZE];
     va_list args;
@@ -1583,7 +1621,7 @@ void LCD_Printf(uint16_t x, uint16_t y, uint16_t fc, uint16_t bc, uint8_t sizey,
 
     if (LCDEnsureHardware() == HAL_OK && lcd_is_ready != 0U)
     {
-        LCDShowStringUnlocked(x, y, (const uint8_t *)buffer, fc, bc, sizey, mode);
+        LCDShowStringUnlocked(x, y, (const uint8_t*)buffer, fc, bc, sizey, mode);
     }
 
     LCDUnlock();
@@ -1659,7 +1697,7 @@ HAL_StatusTypeDef LCD_AsyncPrintf(uint16_t x,
                                   uint16_t bc,
                                   uint8_t sizey,
                                   uint8_t mode,
-                                  const char *fmt,
+                                  const char* fmt,
                                   ...)
 {
     LCDCommand_s cmd = {

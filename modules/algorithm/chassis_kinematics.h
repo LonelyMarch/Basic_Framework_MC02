@@ -32,15 +32,15 @@ typedef struct
 
 typedef struct
 {
-    float x;         // 轮子相对底盘中心的x坐标
-    float y;         // 轮子相对底盘中心的y坐标
+    float x; // 轮子相对底盘中心的x坐标
+    float y; // 轮子相对底盘中心的y坐标
     float drive_dir_x; // 轮子主动滚动方向在底盘x轴上的分量
     float drive_dir_y; // 轮子主动滚动方向在底盘y轴上的分量
 } OmniWheelConfig_s;
 
 typedef struct
 {
-    const OmniWheelConfig_s *wheel_config;
+    const OmniWheelConfig_s* wheel_config;
     uint8_t wheel_num;
     float wheel_radius; // 轮半径。>0时输出轮角速度,<=0时输出轮接地点线速度
 } OmniKinematicsConfig_s;
@@ -59,9 +59,9 @@ typedef struct
 
 typedef struct
 {
-    float half_wheel_base;  // 前后轮中心到几何中心的距离
+    float half_wheel_base; // 前后轮中心到几何中心的距离
     float half_track_width; // 左右轮中心到几何中心的距离
-    float wheel_radius;     // 轮半径。>0时输出轮角速度,<=0时输出轮接地点线速度
+    float wheel_radius; // 轮半径。>0时输出轮角速度,<=0时输出轮接地点线速度
 } MecanumKinematicsConfig_s;
 
 typedef struct
@@ -83,42 +83,47 @@ typedef struct
 /**
  * @brief 预计算通用全向轮固定几何参数,把归一化和正解矩阵求逆移到初始化阶段
  */
-ChassisKinematicsStatus_e OmniKinematicsPrepareConfig(const OmniKinematicsConfig_s *config,
-                                                      OmniKinematicsFastConfig_s *fast_config);
+ChassisKinematicsStatus_e OmniKinematicsPrepareConfig(const OmniKinematicsConfig_s* config,
+                                                      OmniKinematicsFastConfig_s* fast_config);
+
 
 /**
  * @brief 通用全向轮逆运动学: 底盘速度 -> 各轮速度
  */
-ChassisKinematicsStatus_e OmniKinematicsCalculateWheelSpeed(const OmniKinematicsFastConfig_s *fast_config,
-                                                            const ChassisVelocity_s *chassis_speed,
-                                                            float *wheel_speed);
+ChassisKinematicsStatus_e OmniKinematicsCalculateWheelSpeed(const OmniKinematicsFastConfig_s* fast_config,
+                                                            const ChassisVelocity_s* chassis_speed,
+                                                            float* wheel_speed);
+
 
 /**
  * @brief 通用全向轮正运动学: 各轮速度 -> 底盘速度
  */
-ChassisKinematicsStatus_e OmniKinematicsEstimateChassisSpeed(const OmniKinematicsFastConfig_s *fast_config,
-                                                             const float *wheel_speed,
-                                                             ChassisVelocity_s *chassis_speed);
+ChassisKinematicsStatus_e OmniKinematicsEstimateChassisSpeed(const OmniKinematicsFastConfig_s* fast_config,
+                                                             const float* wheel_speed,
+                                                             ChassisVelocity_s* chassis_speed);
+
 
 /**
  * @brief 预计算麦克纳姆轮固定参数,适合高频控制任务反复调用
  */
-ChassisKinematicsStatus_e MecanumKinematicsPrepareConfig(const MecanumKinematicsConfig_s *config,
-                                                         MecanumKinematicsFastConfig_s *fast_config);
+ChassisKinematicsStatus_e MecanumKinematicsPrepareConfig(const MecanumKinematicsConfig_s* config,
+                                                         MecanumKinematicsFastConfig_s* fast_config);
+
 
 /**
  * @brief 标准X型麦克纳姆轮逆运动学: 底盘速度 -> 四轮速度
  */
-ChassisKinematicsStatus_e MecanumKinematicsCalculateWheelSpeed(const MecanumKinematicsFastConfig_s *fast_config,
-                                                               const ChassisVelocity_s *chassis_speed,
-                                                               MecanumWheelSpeed_s *wheel_speed);
+ChassisKinematicsStatus_e MecanumKinematicsCalculateWheelSpeed(const MecanumKinematicsFastConfig_s* fast_config,
+                                                               const ChassisVelocity_s* chassis_speed,
+                                                               MecanumWheelSpeed_s* wheel_speed);
+
 
 /**
  * @brief 标准X型麦克纳姆轮正运动学: 四轮速度 -> 底盘速度
  */
-ChassisKinematicsStatus_e MecanumKinematicsEstimateChassisSpeed(const MecanumKinematicsFastConfig_s *fast_config,
-                                                                const MecanumWheelSpeed_s *wheel_speed,
-                                                                ChassisVelocity_s *chassis_speed);
+ChassisKinematicsStatus_e MecanumKinematicsEstimateChassisSpeed(const MecanumKinematicsFastConfig_s* fast_config,
+                                                                const MecanumWheelSpeed_s* wheel_speed,
+                                                                ChassisVelocity_s* chassis_speed);
 
 #ifdef __cplusplus
 }

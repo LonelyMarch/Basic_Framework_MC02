@@ -1,7 +1,7 @@
 /**
  * @file motor_task.h
  * @author neozng
- * @brief  对所有电机,舵机等控制任务的进一步封装,MotorControlTask()将在操作系统中按一定频率调用
+ * @brief  DJI、LK、HT、DDT、DM 电机的统一周期通信入口
  * @version beta
  * @date 2022-11-01
  * 
@@ -13,13 +13,8 @@
 
 
 /**
- * @brief 电机控制闭环任务,在RTOS中应该设定为1Khz运行
- *        舵机控制任务的频率设定为20Hz或更低
- * 
- * @note 好无语,就一个函数罢了,干脆全部放到头文件里好了.
- * 
+ * @brief 在 RTOS 中按 1 kHz 调用，执行各类 CAN/RS485 电机的一次控制与通信调度。
  */
-void MotorControlTask();
+void MotorControlTask(void);
 
 #endif // !MOTOR_TASK_H
-

@@ -9,16 +9,16 @@
 #define SUPER_CAP_DAEMON_COUNT 100U // 默认在线检测计数,与daemon模块默认值保持一致
 
 static SuperCapInstance super_cap_pool[SUPER_CAP_INSTANCE_COUNT]; // 静态实例池,避免初始化阶段依赖堆分配
-static uint8_t super_cap_idx;                                     // 当前已经分配的超级电容实例数量
+static uint8_t super_cap_idx; // 当前已经分配的超级电容实例数量
 
-static uint16_t SuperCapReadBe16(const uint8_t *data)
+static uint16_t SuperCapReadBe16(const uint8_t* data)
 {
     return (uint16_t)(((uint16_t)data[0] << 8U) | data[1]);
 }
 
-static void SuperCapLostCallback(void *owner)
+static void SuperCapLostCallback(void* owner)
 {
-    SuperCapInstance *instance = (SuperCapInstance *)owner;
+    SuperCapInstance* instance = (SuperCapInstance*)owner;
 
     if (instance == NULL)
     {
@@ -37,17 +37,17 @@ static void SuperCapLostCallback(void *owner)
     }
 }
 
-static void SuperCapRxCallback(CANInstance *_instance)
+static void SuperCapRxCallback(CANInstance* _instance)
 {
-    SuperCapInstance *instance;
-    const uint8_t *rxbuff;
+    SuperCapInstance* instance;
+    const uint8_t* rxbuff;
 
     if (_instance == NULL || _instance->id == NULL)
     {
         return;
     }
 
-    instance = (SuperCapInstance *)_instance->id;
+    instance = (SuperCapInstance*)_instance->id;
     if (_instance->rx_len < SUPER_CAP_RX_LEN)
     {
         instance->rx_error_count++;
@@ -66,9 +66,9 @@ static void SuperCapRxCallback(CANInstance *_instance)
     }
 }
 
-SuperCapInstance *SuperCapInit(SuperCap_Init_Config_s *supercap_config)
+SuperCapInstance* SuperCapInit(SuperCap_Init_Config_s* supercap_config)
 {
-    SuperCapInstance *instance;
+    SuperCapInstance* instance;
     CAN_Init_Config_s can_config;
     Daemon_Init_Config_s daemon_config;
 
@@ -119,7 +119,7 @@ SuperCapInstance *SuperCapInit(SuperCap_Init_Config_s *supercap_config)
     return instance;
 }
 
-uint8_t SuperCapSend(SuperCapInstance *instance, const uint8_t *data, uint8_t len)
+uint8_t SuperCapSend(SuperCapInstance* instance, const uint8_t* data, uint8_t len)
 {
     if (instance == NULL || instance->can_ins == NULL || data == NULL || len == 0U || len > SUPER_CAP_TX_LEN_MAX)
     {
@@ -143,7 +143,7 @@ uint8_t SuperCapSend(SuperCapInstance *instance, const uint8_t *data, uint8_t le
     return 1U;
 }
 
-uint8_t SuperCapGet(SuperCapInstance *instance, SuperCap_Msg_s *msg)
+uint8_t SuperCapGet(SuperCapInstance* instance, SuperCap_Msg_s* msg)
 {
     uint8_t has_update;
     int32_t kernel_lock = -1;
@@ -188,7 +188,7 @@ uint8_t SuperCapGet(SuperCapInstance *instance, SuperCap_Msg_s *msg)
     return has_update;
 }
 
-uint8_t SuperCapIsOnline(SuperCapInstance *instance)
+uint8_t SuperCapIsOnline(SuperCapInstance* instance)
 {
     if (instance == NULL || instance->daemon == NULL)
     {

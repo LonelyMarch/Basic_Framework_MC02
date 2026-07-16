@@ -1,6 +1,7 @@
 # lcd
 
-`modules/lcd` 是达妙 DM_TFT-V1.1 外接 LCD 的模块层驱动，显示控制器为 ST7789V2，屏幕有效显示区域为 `240x280`。当前默认按照达妙官方例程配置为横屏：`LCD_USE_HORIZONTAL=2`，因此 `LCD_W=280`、`LCD_H=240`。
+`modules/lcd` 是达妙 DM_TFT-V1.1 外接 LCD 的模块层驱动，显示控制器为 ST7789V2，屏幕有效显示区域为 `240x280`
+。当前默认按照达妙官方例程配置为横屏：`LCD_USE_HORIZONTAL=2`，因此 `LCD_W=280`、`LCD_H=240`。
 
 ## 硬件连接
 
@@ -13,7 +14,8 @@
 - `LCD_RES`：`PB11`
 - `LCD_BLK`：`PB10`
 
-原理图中还引出了 `SPI1_MISO`、`I2C2_SCL/SDA` 和 `ADC1_CH18_KEY`，它们用于模块扩展能力，例如读屏、触摸或按键采样；当前 LCD 驱动只负责显示，不处理触摸和按键。
+原理图中还引出了 `SPI1_MISO`、`I2C2_SCL/SDA` 和 `ADC1_CH18_KEY`，它们用于模块扩展能力，例如读屏、触摸或按键采样；当前 LCD
+驱动只负责显示，不处理触摸和按键。
 
 ## 工作模式
 
@@ -23,9 +25,11 @@ LCD 模块通过当前工程的 `bsp/spi` 和 `bsp/gpio` 接入 BSP 系统：
 - `LCD_DC`、`LCD_RES`、`LCD_BLK` 通过 `GPIORegister()` 注册为普通输出。
 - SPI 总线互斥由 `bsp/spi` 负责。
 - LCD 命令序列互斥由模块内部 `lcd_mutex` 负责，避免多个任务同时绘图时命令和显存数据交错。
-- `LCDTaskInit()` 会先确保 `LCD_Init()` 已完成，再统一创建 LCD 互斥锁、低优先级绘图任务和命令队列，application 层在 `OSTaskInit()` 中调用。
+- `LCDTaskInit()` 会先确保 `LCD_Init()` 已完成，再统一创建 LCD 互斥锁、低优先级绘图任务和命令队列，application 层在
+  `OSTaskInit()` 中调用。
 
-默认 `LCD_SPI_WORK_MODE=SPI_BLOCK_MODE`，这样 LCD 初始化可以在 FreeRTOS 调度器启动前执行。若确认 LCD 只在任务中绘制，并且 CubeMX 已开启 SPI1 TX DMA，可以在工程宏里改为：
+默认 `LCD_SPI_WORK_MODE=SPI_BLOCK_MODE`，这样 LCD 初始化可以在 FreeRTOS 调度器启动前执行。若确认 LCD 只在任务中绘制，并且
+CubeMX 已开启 SPI1 TX DMA，可以在工程宏里改为：
 
 ```c
 #define LCD_SPI_WORK_MODE SPI_DMA_MODE
@@ -58,13 +62,16 @@ LCD_DrawRectangle(20, 20, 120, 80, LCD_GREEN);
 LCD_DrawCircle(140, 120, 30, LCD_BLUE);
 ```
 
-`LCD_Fill()` 的 `xend/yend` 是右边界和下边界的后一位，和常见半开区间一致。例如填满全屏应写 `LCD_Fill(0, 0, LCD_W, LCD_H, color)`。
+`LCD_Fill()` 的 `xend/yend` 是右边界和下边界的后一位，和常见半开区间一致。例如填满全屏应写
+`LCD_Fill(0, 0, LCD_W, LCD_H, color)`。
 
-`LCD_Fill()`、水平线、垂直线和矩形边框会通过区域窗口连续写入同一个颜色，适合绘制背景块、边框和简单 UI。斜线和圆形仍按像素点绘制，不建议在高频任务中大量刷新。
+`LCD_Fill()`、水平线、垂直线和矩形边框会通过区域窗口连续写入同一个颜色，适合绘制背景块、边框和简单
+UI。斜线和圆形仍按像素点绘制，不建议在高频任务中大量刷新。
 
 ## 异步绘图
 
-同步绘图接口会在调用者任务中完成 SPI 刷屏。全屏填充需要写入 `280 * 240 * 2` 字节，在当前 SPI1 约 `30 Mbits/s` 的配置下会占用几十毫秒，因此高优先级任务不应直接调用大面积刷新接口。
+同步绘图接口会在调用者任务中完成 SPI 刷屏。全屏填充需要写入 `280 * 240 * 2` 字节，在当前 SPI1 约 `30 Mbits/s`
+的配置下会占用几十毫秒，因此高优先级任务不应直接调用大面积刷新接口。
 
 异步接口只把绘图命令投递到 LCD 队列，由低优先级 `lcdtask` 串行执行：
 
@@ -75,7 +82,8 @@ LCD_AsyncDrawRectangle(4, 4, 120, 60, LCD_GREEN);
 LCD_AsyncPrintf(8, 8, LCD_WHITE, LCD_DARKBLUE, 16, LCD_TEXT_MODE_NORMAL, "fps:%u", fps);
 ```
 
-异步接口只适合在 FreeRTOS 调度器启动后使用。当前工程在 `OSTaskInit()` 中调用 `LCDTaskInit()`，该函数会先确保 `LCD_Init()` 成功，再创建异步绘图队列。队列深度由 `LCD_ASYNC_QUEUE_DEPTH` 控制，默认 8；队列满时接口返回 `HAL_BUSY`，上层可以直接丢弃本次调试刷新。
+异步接口只适合在 FreeRTOS 调度器启动后使用。当前工程在 `OSTaskInit()` 中调用 `LCDTaskInit()`，该函数会先确保 `LCD_Init()`
+成功，再创建异步绘图队列。队列深度由 `LCD_ASYNC_QUEUE_DEPTH` 控制，默认 8；队列满时接口返回 `HAL_BUSY`，上层可以直接丢弃本次调试刷新。
 
 `LCD_ShowPicture()` 仍保留为同步接口。图片数据往往较大，若异步化需要保证图片缓冲区在 LCDTask 消费前一直有效，后续确实需要时再单独扩展。
 
@@ -90,7 +98,8 @@ LCD_ShowFloatNum(10, 100, -12.34f, 3, 2, LCD_CYAN, LCD_BLACK, 24);
 LCD_Printf(10, 140, LCD_GREEN, LCD_BLACK, 16, LCD_TEXT_MODE_NORMAL, "fps:%u", fps);
 ```
 
-中文显示沿用官方字库文件 `lcd_font.h`，只支持字库中已经取模的汉字。官方字库内置了“达妙科技”四个字，驱动已经对这四个字做了 UTF-8 到 GBK 字库索引的映射，因此工程源码按 UTF-8 保存时可以直接这样写：
+中文显示沿用官方字库文件 `lcd_font.h`，只支持字库中已经取模的汉字。官方字库内置了“达妙科技”四个字，驱动已经对这四个字做了
+UTF-8 到 GBK 字库索引的映射，因此工程源码按 UTF-8 保存时可以直接这样写：
 
 ```c
 LCD_ShowChinese(10, 180, (const uint8_t *)"达妙", LCD_WHITE, LCD_BLACK, 32, LCD_TEXT_MODE_NORMAL);

@@ -4,9 +4,9 @@
 #include "bsp_log.h"
 #include "string.h"
 
-static PWMInstance *buzzer;
-static BuzzerInstance buzzer_pool[BUZZER_DEVICE_CNT];        // 报警实例静态池,避免FreeRTOS运行期申请堆内存
-static BuzzerInstance *buzzer_list[BUZZER_DEVICE_CNT] = {0}; // 按报警等级索引实例,数值越小优先级越高
+static PWMInstance* buzzer;
+static BuzzerInstance buzzer_pool[BUZZER_DEVICE_CNT]; // 报警实例静态池,避免FreeRTOS运行期申请堆内存
+static BuzzerInstance* buzzer_list[BUZZER_DEVICE_CNT] = {0}; // 按报警等级索引实例,数值越小优先级越高
 
 static float BuzzerLimitLoudness(float loudness)
 {
@@ -61,7 +61,7 @@ void BuzzerInit()
     buzzer = PWMRegister(&buzzer_config);
 }
 
-BuzzerInstance *BuzzerRegister(Buzzer_config_s *config)
+BuzzerInstance* BuzzerRegister(Buzzer_config_s* config)
 {
     if (config == NULL)
     {
@@ -87,7 +87,7 @@ BuzzerInstance *BuzzerRegister(Buzzer_config_s *config)
         return NULL;
     }
 
-    BuzzerInstance *buzzer_temp = &buzzer_pool[config->alarm_level];
+    BuzzerInstance* buzzer_temp = &buzzer_pool[config->alarm_level];
     memset(buzzer_temp, 0, sizeof(BuzzerInstance));
 
     buzzer_temp->alarm_level = config->alarm_level;
@@ -99,7 +99,7 @@ BuzzerInstance *BuzzerRegister(Buzzer_config_s *config)
     return buzzer_temp;
 }
 
-void AlarmSetStatus(BuzzerInstance *buzzer, AlarmState_e state)
+void AlarmSetStatus(BuzzerInstance* buzzer, AlarmState_e state)
 {
     if (buzzer == NULL) // 上层可能在注册失败后仍调用状态设置,这里直接忽略避免空指针访问
     {
@@ -125,7 +125,7 @@ void BuzzerTask()
         return;
     }
 
-    BuzzerInstance *buzz;
+    BuzzerInstance* buzz;
     uint8_t has_active_alarm = 0U; // 用于判断本轮是否找到正在响的报警,没有则关闭蜂鸣器
 
     for (size_t i = 0; i < BUZZER_DEVICE_CNT; ++i)

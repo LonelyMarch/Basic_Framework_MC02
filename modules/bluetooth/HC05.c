@@ -11,22 +11,22 @@
 typedef enum
 {
     HC05_PARSE_WAIT_HEAD = 0, // 等待帧头
-    HC05_PARSE_WAIT_LEN,      // 读取有效载荷长度
-    HC05_PARSE_WAIT_PAYLOAD,  // 读取有效载荷
+    HC05_PARSE_WAIT_LEN, // 读取有效载荷长度
+    HC05_PARSE_WAIT_PAYLOAD, // 读取有效载荷
     HC05_PARSE_WAIT_CHECKSUM, // 读取校验字节
-    HC05_PARSE_WAIT_END,      // 读取帧尾
+    HC05_PARSE_WAIT_END, // 读取帧尾
 } HC05ParseState;
 
-static HC05 hc05_msg;                         // HC05通信数据
-static USARTInstance *hc05_usart_instance;    // HC05串口通信实例
-static volatile uint8_t hc05_init_flag = 0U;  // HC05初始化标志位
-static HC05ParseState hc05_parse_state;       // 字节流解析状态机
-static uint8_t hc05_parse_len;                // 当前帧声明的有效载荷长度
-static uint8_t hc05_parse_index;              // 当前已经接收的有效载荷字节数
-static uint8_t hc05_parse_checksum;           // 当前帧计算得到的校验值
+static HC05 hc05_msg; // HC05通信数据
+static USARTInstance* hc05_usart_instance; // HC05串口通信实例
+static volatile uint8_t hc05_init_flag = 0U; // HC05初始化标志位
+static HC05ParseState hc05_parse_state; // 字节流解析状态机
+static uint8_t hc05_parse_len; // 当前帧声明的有效载荷长度
+static uint8_t hc05_parse_index; // 当前已经接收的有效载荷字节数
+static uint8_t hc05_parse_checksum; // 当前帧计算得到的校验值
 static uint8_t hc05_parse_buffer[HC05_DATASIZE]; // 当前正在接收的有效载荷缓存
 
-static uint8_t HC05CalcChecksum(const uint8_t *data, uint8_t len)
+static uint8_t HC05CalcChecksum(const uint8_t* data, uint8_t len)
 {
     uint8_t checksum = len;
 
@@ -156,7 +156,7 @@ static void HC05RxCallback(void)
 }
 
 // HC05串口接收初始化
-HC05 *HC05Init(UART_HandleTypeDef *hc05_usart_handle)
+HC05* HC05Init(UART_HandleTypeDef* hc05_usart_handle)
 {
     USART_Init_Config_s conf = {
         .recv_buff_size = HC05_FRAME_MAX_SIZE,
@@ -179,7 +179,7 @@ HC05 *HC05Init(UART_HandleTypeDef *hc05_usart_handle)
     return &hc05_msg;
 }
 
-uint8_t HC05_GetData(uint8_t *data, uint8_t max_len)
+uint8_t HC05_GetData(uint8_t* data, uint8_t max_len)
 {
     uint8_t copy_len;
     uint32_t primask;
@@ -208,7 +208,7 @@ uint8_t HC05_GetData(uint8_t *data, uint8_t max_len)
 }
 
 // HC05串口发送函数，一次最多发送HC05_DATASIZE个数据
-HAL_StatusTypeDef HC05_SendData(const uint8_t *data, uint8_t data_num)
+HAL_StatusTypeDef HC05_SendData(const uint8_t* data, uint8_t data_num)
 {
     HAL_StatusTypeDef status;
     uint8_t frame[HC05_FRAME_MAX_SIZE];

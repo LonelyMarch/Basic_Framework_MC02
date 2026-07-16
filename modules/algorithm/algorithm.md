@@ -1,6 +1,7 @@
 # algorithm
 
-`modules/algorithm`是module层中的纯算法集合,供application层和其他module复用。该目录不直接操作BSP外设,不创建FreeRTOS任务,也不在中断中主动调度系统资源。调用者需要自己决定算法实例的生命周期、调用周期和并发保护方式。
+`modules/algorithm`
+是module层中的纯算法集合,供application层和其他module复用。该目录不直接操作BSP外设,不创建FreeRTOS任务,也不在中断中主动调度系统资源。调用者需要自己决定算法实例的生命周期、调用周期和并发保护方式。
 
 ## 模块边界
 
@@ -12,20 +13,21 @@ algorithm层只负责计算:
 - 不直接依赖application层状态。
 - 不在算法内部打印日志。
 
-需要注意的是,`kalman_filter`和`user_lib`中的矩阵工具会在初始化阶段使用`user_malloc`分配矩阵缓冲区。在FreeRTOS头文件已包含时,`user_malloc`映射到`pvPortMalloc`;否则映射到标准库`malloc`。这类对象应在初始化阶段创建,不要在高频控制循环中反复创建和释放。
+需要注意的是,`kalman_filter`和`user_lib`中的矩阵工具会在初始化阶段使用`user_malloc`分配矩阵缓冲区。在FreeRTOS头文件已包含时,
+`user_malloc`映射到`pvPortMalloc`;否则映射到标准库`malloc`。这类对象应在初始化阶段创建,不要在高频控制循环中反复创建和释放。
 
 ## 文件组成
 
-| 文件 | 作用 |
-| --- | --- |
-| `controller.h/.c` | PID控制器,支持积分限幅、变速积分、微分先行、输出滤波、微分滤波等改进项。 |
-| `user_lib.h/.c` | 通用数学工具,包括限幅、角度格式化、三维向量运算、平均滤波、CMSIS-DSP矩阵封装和零初始化内存分配。 |
-| `kalman_filter.h/.c` | 通用卡尔曼滤波框架,基于CMSIS-DSP矩阵接口实现预测、量测、增益计算和状态更新。 |
-| `QuaternionEKF.h/.c` | 面向IMU姿态解算的四元数EKF,在通用卡尔曼滤波框架上实现陀螺仪/加速度计融合。 |
-| `crc8.h/.c` | CRC8查表计算。 |
-| `crc16.h/.c` | CRC16和Modbus CRC查表计算。 |
-| `chassis_kinematics.h/.c` | 麦克纳姆轮和通用全向轮底盘运动学解算。 |
-| `algo_filter.h/.c` | 通用标量滤波器,包括指数平均、一阶低通和窗口平均。 |
+| 文件                        | 作用                                                    |
+|---------------------------|-------------------------------------------------------|
+| `controller.h/.c`         | PID控制器,支持积分限幅、变速积分、微分先行、输出滤波、微分滤波等改进项。                |
+| `user_lib.h/.c`           | 通用数学工具,包括限幅、角度格式化、三维向量运算、平均滤波、CMSIS-DSP矩阵封装和零初始化内存分配。 |
+| `kalman_filter.h/.c`      | 通用卡尔曼滤波框架,基于CMSIS-DSP矩阵接口实现预测、量测、增益计算和状态更新。           |
+| `QuaternionEKF.h/.c`      | 面向IMU姿态解算的四元数EKF,在通用卡尔曼滤波框架上实现陀螺仪/加速度计融合。             |
+| `crc8.h/.c`               | CRC8查表计算。                                             |
+| `crc16.h/.c`              | CRC16和Modbus CRC查表计算。                                 |
+| `chassis_kinematics.h/.c` | 麦克纳姆轮和通用全向轮底盘运动学解算。                                   |
+| `algo_filter.h/.c`        | 通用标量滤波器,包括指数平均、一阶低通和窗口平均。                             |
 
 ## 运行与实时性原则
 
@@ -36,7 +38,9 @@ algorithm层只负责计算:
 3. 同一个算法实例默认不保证跨任务并发安全。
 4. 如果多个任务或任务/中断共享同一个实例,由上层加互斥锁、临界区或改成单任务所有权。
 
-STM32H723当前工程已经在CMake中定义`ARM_MATH_CM7`,并链接`arm_cortexM7lfdp_math`。矩阵、三角函数和开方等可以继续使用CMSIS-DSP与硬件FPU。CubeMX中应保持FreeRTOS FPU支持开启;I-Cache可提升取指效率,但D-Cache涉及DMA缓存一致性,需要结合BSP层DMA缓冲区策略统一评估。
+STM32H723当前工程已经在CMake中定义`ARM_MATH_CM7`,并链接`arm_cortexM7lfdp_math`
+。矩阵、三角函数和开方等可以继续使用CMSIS-DSP与硬件FPU。CubeMX中应保持FreeRTOS
+FPU支持开启;I-Cache可提升取指效率,但D-Cache涉及DMA缓存一致性,需要结合BSP层DMA缓冲区策略统一评估。
 
 ## PID控制器
 
@@ -146,7 +150,8 @@ alpha = dt / (rc + dt)
 y = y + alpha * (x - y)
 ```
 
-为了保证运行期速度,`LowPassFilter_t`只保留固定周期接口。`LowPassFilterInit()`在初始化阶段根据`rc`和`dt`预计算`alpha`;`LowPassFilterUpdate()`运行期只做乘加。若调用者已经有滤波系数,可使用`LowPassFilterInitByAlpha()`。
+为了保证运行期速度,`LowPassFilter_t`只保留固定周期接口。`LowPassFilterInit()`在初始化阶段根据`rc`和`dt`预计算`alpha`;
+`LowPassFilterUpdate()`运行期只做乘加。若调用者已经有滤波系数,可使用`LowPassFilterInitByAlpha()`。
 
 窗口平均:
 

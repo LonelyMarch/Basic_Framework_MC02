@@ -1,6 +1,9 @@
-# referee
+# referee（已弃用）
 
-`modules/referee` 是 RoboMaster 裁判系统模块，负责裁判系统串口通信、协议解析、裁判数据缓存、客户端 UI 绘制，以及机器人间自定义交互数据收发。
+> [!WARNING]
+> `modules/referee` 已弃用。该目录仅保留为历史协议实现参考，不参与当前工程构建，也不会创建裁判系统或 UI 任务。新代码禁止依赖本目录中的头文件、类型和函数；如需重新接入裁判系统，应根据当前赛季官方协议重新设计独立模块。
+
+本目录曾用于 RoboMaster 裁判系统串口通信、协议解析、裁判数据缓存、客户端 UI 绘制，以及机器人间自定义交互数据收发。以下内容只描述历史实现，不代表当前工程仍启用这些能力。
 
 ## 模块组成
 
@@ -41,7 +44,8 @@ RTOS 启动后，`StartUITASK()` 会先调用 `MyUIInit()`：
 - 返回 `1U`：已经收到裁判系统 `robot_id`，并且初始 UI 帧全部成功进入发送队列。
 - 返回 `0U`：裁判系统暂未上线，或者初始 UI 帧暂时无法全部入队。后续由 `UITask()` 低频重试。
 
-`StartUITASK()` 进入循环后每 `1ms` 调用一次 `UITask()`。`UITask()` 不会阻塞等待 UI 发送完成，而是每轮先泵一次发送队列，再根据状态决定是否继续初始化或刷新 UI。
+`StartUITASK()` 进入循环后每 `1ms` 调用一次 `UITask()`。`UITask()` 不会阻塞等待 UI 发送完成，而是每轮先泵一次发送队列，再根据状态决定是否继续初始化或刷新
+UI。
 
 ## 接收流程
 
@@ -56,7 +60,8 @@ RTOS 启动后，`StartUITASK()` 会先调用 `MyUIInit()`：
 7. 校验整帧 CRC16。
 8. 根据 `cmd_id` 更新 `referee_info_t` 中对应的数据字段。
 
-`0x0301` 学生机器人交互帧同时承载客户端 UI 和机器人间通信。本模块只把 `data_cmd_id == Communicate_Data_ID` 的数据保存到 `ReceiveData`，避免把本机发送的 UI 绘图帧误当作自定义通信数据。
+`0x0301` 学生机器人交互帧同时承载客户端 UI 和机器人间通信。本模块只把 `data_cmd_id == Communicate_Data_ID` 的数据保存到
+`ReceiveData`，避免把本机发送的 UI 绘图帧误当作自定义通信数据。
 
 ## 数据读取
 
@@ -86,7 +91,8 @@ if (RefereeGet(&referee_snapshot) != 0U)
 - `lid_mode`
 - `Chassis_Power_Data`
 
-referee 模块只负责检测这些字段是否变化，并根据变化刷新客户端 UI。真实机器人状态需要 application 层主动写入该结构体，否则动态 UI 不会反映实际状态。
+referee 模块只负责检测这些字段是否变化，并根据变化刷新客户端 UI。真实机器人状态需要 application 层主动写入该结构体，否则动态
+UI 不会反映实际状态。
 
 ## UI 任务逻辑
 
@@ -110,7 +116,8 @@ referee 模块只负责检测这些字段是否变化，并根据变化刷新客
 
 绘制接口分为两类：
 
-- `UILineDraw()`、`UIRectangleDraw()`、`UICircleDraw()`、`UIOvalDraw()`、`UIArcDraw()`、`UIFloatDraw()`、`UIIntDraw()`、`UICharDraw()`：只填充图形或字符串结构体，不发送。
+- `UILineDraw()`、`UIRectangleDraw()`、`UICircleDraw()`、`UIOvalDraw()`、`UIArcDraw()`、`UIFloatDraw()`、`UIIntDraw()`、
+  `UICharDraw()`：只填充图形或字符串结构体，不发送。
 - `UIDelete()`、`UIGraphRefresh()`、`UICharRefresh()`：构造完整裁判系统交互帧，并投递到 referee 发送队列。
 
 绘制一条线：
@@ -162,26 +169,9 @@ UICharDraw(&text, "tx0", UI_Graph_ADD, 7, UI_Color_Green, 18, 2, 100, 200, "Powe
 - 裁判系统 CRC 与 `modules/algorithm` 中的通用 CRC 实现用途不同，不能随意替换。
 - `referee_protocol.h` 中协议结构体按裁判系统协议保持 1 字节对齐；运行期状态结构体不额外强制 pack。
 
-## 当前接入点
+## 当前接入状态
 
-当前工程中，`application/chassis/chassis.c` 定义 `ui_data` 并调用 `UITaskInit(&huart1, &ui_data)`。
-
-`application/robot_task.h` 中的 `StartUITASK()` 负责运行 UI 任务：
-
-```c
-__attribute__((noreturn)) void StartUITASK(void *argument)
-{
-    if (MyUIInit() != 0U)
-    {
-        LOGINFO("[freeRTOS] UI init done, referee communication established");
-    }
-
-    for (;;)
-    {
-        UITask();
-        osDelay(1);
-    }
-}
-```
-
-后续如果需要让 UI 显示真实状态，需要在 application 层把实际模式和功率数据同步到 `ui_data`。
+- `CMakeLists.txt` 已移除本目录的源文件和头文件搜索路径。
+- `application/chassis/chassis.c` 已移除裁判系统与 UI 初始化。
+- `application/robot_task.h` 已移除 `StartUITASK()` 及对应线程创建。
+- 当前 APP 不再读取裁判系统数据，也不再发送客户端 UI 或机器人间裁判系统交互数据。

@@ -30,19 +30,20 @@ typedef enum
     ALARM_LEVEL_MEDIUM,
     ALARM_LEVEL_BELOW_MEDIUM,
     ALARM_LEVEL_LOW,
-}AlarmLevel_e;
+} AlarmLevel_e;
 
 typedef enum
 {
     ALARM_OFF = 0,
     ALARM_ON,
-}AlarmState_e;
+} AlarmState_e;
+
 typedef struct
 {
     AlarmLevel_e alarm_level;
     BuzzerNote_e note;
     float loudness;
-}Buzzer_config_s;
+} Buzzer_config_s;
 
 typedef struct
 {
@@ -50,11 +51,17 @@ typedef struct
     BuzzerNote_e note;
     AlarmLevel_e alarm_level;
     AlarmState_e alarm_state;
-}BuzzerInstance;
+} BuzzerInstance;
 
 
 void BuzzerInit();
+
+
 void BuzzerTask();
-BuzzerInstance *BuzzerRegister(Buzzer_config_s *config);
-void AlarmSetStatus(BuzzerInstance *buzzer, AlarmState_e state);
+
+
+BuzzerInstance* BuzzerRegister(Buzzer_config_s* config);
+
+
+void AlarmSetStatus(BuzzerInstance* buzzer, AlarmState_e state);
 #endif // !BUZZER_H
