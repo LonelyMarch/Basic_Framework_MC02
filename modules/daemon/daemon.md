@@ -136,4 +136,5 @@ void DaemonTask(void);
 
 ### DaemonTask
 
-由 application 层 daemon 任务周期调用。当前工程中 `application/robot_task.c` 创建 `daemon_task`，使用 `osDelay(DAEMON_TASK_PERIOD_MS)` 维持默认 100 Hz 调度。当前 APP 未注册具体业务实例时，该任务只保留运行框架。
+由 application 层 daemon 任务周期调用。当前工程中 `application/robot_task.c` 创建 `daemon_task`，使用
+`osDelay(DAEMON_TASK_PERIOD_MS)` 维持默认 100 Hz 调度。当前 APP 未注册具体业务实例时，该任务只保留运行框架。

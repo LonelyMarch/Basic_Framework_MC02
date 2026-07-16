@@ -1,10 +1,12 @@
 # ins_task
 
-`modules/BMI088/ins_task.c` 是板载 BMI088 的姿态解算与温控部分。它直接使用同目录下的 BMI088 芯片驱动获取传感器数据，并使用 `modules/algorithm` 中的四元数
+`modules/BMI088/ins_task.c` 是板载 BMI088 的姿态解算与温控部分。它直接使用同目录下的 BMI088 芯片驱动获取传感器数据，并使用
+`modules/algorithm` 中的四元数
 EKF 进行姿态融合，并通过 `bsp/pwm` 控制 BMI088 加热 PWM。
 
 本模块不直接操作 BMI088 寄存器，也不直接管理 SPI 片选。BMI088 芯片级读写由 `modules/BMI088` 完成，SPI、GPIO、PWM 等硬件访问由
-BSP 层统一封装。芯片驱动、板载传感器温控和姿态解算现在共同归属于 `modules/BMI088`，不再额外设置一层仅服务于 BMI088 的通用 `imu` 模块。
+BSP 层统一封装。芯片驱动、板载传感器温控和姿态解算现在共同归属于 `modules/BMI088`，不再额外设置一层仅服务于 BMI088 的通用
+`imu` 模块。
 
 ## 对外数据
 

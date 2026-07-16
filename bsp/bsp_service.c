@@ -13,7 +13,7 @@
 typedef struct
 {
     BSPServiceEventCallback callback;
-    void *arg;
+    void* arg;
 } BSPServiceEvent;
 
 static StaticQueue_t bsp_service_queue_cb;
@@ -22,7 +22,7 @@ static QueueHandle_t bsp_service_queue;
 static TaskHandle_t bsp_service_task_handle;
 static volatile uint32_t bsp_service_dropped_cnt;
 
-static void BSPServiceNotifyFromISR(BaseType_t *higher_priority_task_woken)
+static void BSPServiceNotifyFromISR(BaseType_t* higher_priority_task_woken)
 {
     if ((bsp_service_task_handle != NULL) && (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING))
     {
@@ -98,7 +98,7 @@ void BSPServiceNotify(void)
     }
 }
 
-uint8_t BSPServicePost(BSPServiceEventCallback callback, void *arg)
+uint8_t BSPServicePost(BSPServiceEventCallback callback, void* arg)
 {
     BSPServiceEvent event;
     QueueHandle_t queue = BSPServiceGetQueue();
@@ -121,7 +121,7 @@ uint8_t BSPServicePost(BSPServiceEventCallback callback, void *arg)
     return 1;
 }
 
-uint8_t BSPServicePostFromISR(BSPServiceEventCallback callback, void *arg)
+uint8_t BSPServicePostFromISR(BSPServiceEventCallback callback, void* arg)
 {
     BSPServiceEvent event;
     BaseType_t higher_priority_task_woken = pdFALSE;
@@ -174,7 +174,9 @@ uint32_t BSPServiceGetDroppedEventCount(void)
     return bsp_service_dropped_cnt;
 }
 
-__attribute__((noreturn)) void BSPServiceTask(void *argument)
+__attribute__ ((noreturn))
+
+void BSPServiceTask(void* argument)
 {
     (void)argument;
 

@@ -25,7 +25,8 @@ void ExampleInit(void);
 void ExampleTask(void);
 ```
 
-`Init()` 应完成实例注册、消息发布者/订阅者注册和初始安全状态设置。`Task()` 只处理一次控制更新，不允许包含永久循环；永久循环由 `robot_task.c` 中的 RTOS 任务统一提供。
+`Init()` 应完成实例注册、消息发布者/订阅者注册和初始安全状态设置。`Task()` 只处理一次控制更新，不允许包含永久循环；永久循环由
+`robot_task.c` 中的 RTOS 任务统一提供。
 
 ## 数据通信
 

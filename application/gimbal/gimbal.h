@@ -11,6 +11,7 @@
  */
 void GimbalInit(void);
 
+
 /**
  * @brief 执行一次云台状态机与控制目标更新。
  */

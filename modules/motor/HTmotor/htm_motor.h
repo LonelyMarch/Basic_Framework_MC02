@@ -34,7 +34,7 @@ typedef struct
 
 typedef struct
 {
-    HTMRS485Bus *bus;
+    HTMRS485Bus* bus;
     uint8_t device_address;
     HTMMotor_Control_Mode_e control_mode;
     Motor_Reverse_Flag_e motor_reverse_flag;
@@ -43,8 +43,8 @@ typedef struct
 typedef struct HTMMotorInstance
 {
     HTMMotor_Measure_t measure;
-    HTMRS485Bus *bus;
-    DaemonInstance *daemon;
+    HTMRS485Bus* bus;
+    DaemonInstance* daemon;
     HTMMotor_Control_Mode_e control_mode;
     Motor_Reverse_Flag_e motor_reverse_flag;
     uint8_t device_address;
@@ -56,18 +56,37 @@ typedef struct HTMMotorInstance
     uint8_t pending_data_len;
 } HTMMotorInstance;
 
-HTMMotorInstance *HTMMotorInit(const HTMMotor_Init_Config_s *config);
 
-HAL_StatusTypeDef HTMMotorEnable(HTMMotorInstance *motor);
-HAL_StatusTypeDef HTMMotorStop(HTMMotorInstance *motor);
-HAL_StatusTypeDef HTMMotorSetOpenLoop(HTMMotorInstance *motor, int16_t power);
-HAL_StatusTypeDef HTMMotorSetSpeed(HTMMotorInstance *motor, float speed_rpm);
-HAL_StatusTypeDef HTMMotorSetAbsolutePosition(HTMMotorInstance *motor, float position_deg);
-HAL_StatusTypeDef HTMMotorSetRelativePosition(HTMMotorInstance *motor, float delta_deg);
-HAL_StatusTypeDef HTMMotorSetCurrentPositionAsZero(HTMMotorInstance *motor);
-HAL_StatusTypeDef HTMMotorClearFault(HTMMotorInstance *motor);
+HTMMotorInstance* HTMMotorInit(const HTMMotor_Init_Config_s* config);
 
-uint8_t HTMMotorIsOnline(const HTMMotorInstance *motor);
-HTMMotor_Control_Mode_e HTMMotorGetControlMode(const HTMMotorInstance *motor);
+
+HAL_StatusTypeDef HTMMotorEnable(HTMMotorInstance* motor);
+
+
+HAL_StatusTypeDef HTMMotorStop(HTMMotorInstance* motor);
+
+
+HAL_StatusTypeDef HTMMotorSetOpenLoop(HTMMotorInstance* motor, int16_t power);
+
+
+HAL_StatusTypeDef HTMMotorSetSpeed(HTMMotorInstance* motor, float speed_rpm);
+
+
+HAL_StatusTypeDef HTMMotorSetAbsolutePosition(HTMMotorInstance* motor, float position_deg);
+
+
+HAL_StatusTypeDef HTMMotorSetRelativePosition(HTMMotorInstance* motor, float delta_deg);
+
+
+HAL_StatusTypeDef HTMMotorSetCurrentPositionAsZero(HTMMotorInstance* motor);
+
+
+HAL_StatusTypeDef HTMMotorClearFault(HTMMotorInstance* motor);
+
+
+uint8_t HTMMotorIsOnline(const HTMMotorInstance* motor);
+
+
+HTMMotor_Control_Mode_e HTMMotorGetControlMode(const HTMMotorInstance* motor);
 
 #endif

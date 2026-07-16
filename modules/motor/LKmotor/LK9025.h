@@ -147,51 +147,112 @@ typedef struct
 
 typedef struct LKMotorInstance LKMotorInstance;
 
+
 /* can_init_config.tx_id 填写逻辑电机 ID。模式注册后不可修改。 */
 LKMotorInstance* LKMotorInit(const LKMotor_Init_Config_s* config);
+
+
 LKMotor_Work_Mode_e LKMotorGetMode(const LKMotorInstance* motor);
 
+
 HAL_StatusTypeDef LKMotorSetMultiTorque(LKMotorInstance* motor, int16_t iq);
+
+
 HAL_StatusTypeDef LKMotorSetOpenTorque(LKMotorInstance* motor, int16_t power_control);
+
+
 HAL_StatusTypeDef LKMotorSetTorque(LKMotorInstance* motor, int16_t iq_control);
+
+
 HAL_StatusTypeDef LKMotorSetSpeed(LKMotorInstance* motor, int32_t speed_0p01dps);
+
+
 HAL_StatusTypeDef LKMotorSetMultiTurnPosition(LKMotorInstance* motor, int32_t angle_0p01deg);
+
+
 HAL_StatusTypeDef LKMotorSetMultiTurnPositionWithSpeed(LKMotorInstance* motor,
                                                        int32_t angle_0p01deg,
                                                        uint16_t max_speed_dps);
+
+
 HAL_StatusTypeDef LKMotorSetSingleTurnPosition(LKMotorInstance* motor,
                                                LKMotor_Spin_Direction_e direction,
                                                uint16_t angle_0p01deg);
+
+
 HAL_StatusTypeDef LKMotorSetSingleTurnPositionWithSpeed(LKMotorInstance* motor,
                                                         LKMotor_Spin_Direction_e direction,
                                                         uint16_t angle_0p01deg,
                                                         uint16_t max_speed_dps);
+
+
 HAL_StatusTypeDef LKMotorSetIncrementPosition(LKMotorInstance* motor, int32_t delta_angle_0p01deg);
+
+
 HAL_StatusTypeDef LKMotorSetIncrementPositionWithSpeed(LKMotorInstance* motor,
                                                        int32_t delta_angle_0p01deg,
                                                        uint16_t max_speed_dps);
 
+
 HAL_StatusTypeDef LKMotorStop(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorEnable(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorOff(LKMotorInstance* motor);
+
+
 uint8_t LKMotorIsOnline(const LKMotorInstance* motor);
+
+
 uint8_t LKMotorGetMeasure(LKMotorInstance* motor, LKMotor_Measure_t* measure);
 
+
 HAL_StatusTypeDef LKMotorReadPID(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorWritePIDToRAM(LKMotorInstance* motor, const LKMotor_PID_Param_s* pid);
+
+
 HAL_StatusTypeDef LKMotorWritePIDToROM(LKMotorInstance* motor, const LKMotor_PID_Param_s* pid);
+
+
 HAL_StatusTypeDef LKMotorReadAcceleration(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorWriteAccelerationToRAM(LKMotorInstance* motor, int32_t accel_dps2);
+
+
 HAL_StatusTypeDef LKMotorReadEncoder(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorWriteEncoderZeroToROM(LKMotorInstance* motor, uint16_t encoder_offset);
+
+
 HAL_StatusTypeDef LKMotorSetCurrentPositionAsZero(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorReadMultiTurnAngle(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorReadSingleTurnAngle(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorClearAngle(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorReadStatus1AndError(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorClearError(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorReadStatus2(LKMotorInstance* motor);
+
+
 HAL_StatusTypeDef LKMotorReadStatus3(LKMotorInstance* motor);
+
 
 /* 由统一 MotorControlTask 约 1 kHz 调用。 */
 void LKMotorControl(void);

@@ -10,14 +10,30 @@ static StaticSemaphore_t bsp_flash_mutex_cb;
 static SemaphoreHandle_t bsp_flash_mutex = NULL;
 static uint32_t bsp_flash_last_error = 0U;
 
+
 static int8_t BSP_Flash_Lock(uint32_t timeout);
+
+
 static void BSP_Flash_Unlock(int8_t lock_state);
+
+
 static int8_t BSP_Flash_CheckRange(uint32_t offset, uint32_t size);
+
+
 static int8_t BSP_Flash_CheckAligned(uint32_t value, uint32_t align);
+
+
 static uint32_t BSP_Flash_OffsetToAddress(uint32_t offset);
+
+
 static uint32_t BSP_Flash_AddressToSector(uint32_t address);
+
+
 static int8_t BSP_Flash_CheckErased(uint32_t address, uint32_t size);
+
+
 static void BSP_Flash_InvalidateCache(uint32_t address, uint32_t size);
+
 
 /**
  * @brief 初始化片上Flash BSP
@@ -50,7 +66,7 @@ uint32_t BSP_Flash_GetUserSize(void)
     return BSP_FLASH_USER_SIZE;
 }
 
-int8_t BSP_Flash_Read(uint32_t offset, void *buffer, uint32_t size)
+int8_t BSP_Flash_Read(uint32_t offset, void* buffer, uint32_t size)
 {
     int8_t lock_state;
 
@@ -71,7 +87,7 @@ int8_t BSP_Flash_Read(uint32_t offset, void *buffer, uint32_t size)
         return lock_state;
     }
 
-    memcpy(buffer, (const void *)BSP_Flash_OffsetToAddress(offset), size);
+    memcpy(buffer, (const void*)BSP_Flash_OffsetToAddress(offset), size);
     BSP_Flash_Unlock(lock_state);
     return BSP_FLASH_OK;
 }
@@ -152,10 +168,10 @@ int8_t BSP_Flash_EraseAll(void)
     return BSP_Flash_Erase(0U, BSP_FLASH_USER_SIZE);
 }
 
-int8_t BSP_Flash_Write(uint32_t offset, const void *buffer, uint32_t size)
+int8_t BSP_Flash_Write(uint32_t offset, const void* buffer, uint32_t size)
 {
     uint32_t flash_word[FLASH_NB_32BITWORD_IN_FLASHWORD];
-    const uint8_t *write_data = (const uint8_t *)buffer;
+    const uint8_t* write_data = (const uint8_t*)buffer;
     uint32_t current_offset;
     uint32_t current_address;
     uint32_t remain_size;
@@ -224,7 +240,7 @@ int8_t BSP_Flash_Write(uint32_t offset, const void *buffer, uint32_t size)
         }
 
         BSP_Flash_InvalidateCache(current_address, BSP_FLASH_PROGRAM_UNIT);
-        if (memcmp((const void *)current_address, flash_word, sizeof(flash_word)) != 0)
+        if (memcmp((const void*)current_address, flash_word, sizeof(flash_word)) != 0)
         {
             LOGERROR("[bsp_flash] verify failed, address = 0x%X", current_address);
             status = BSP_FLASH_ERROR_VERIFY;
@@ -335,7 +351,7 @@ static uint32_t BSP_Flash_AddressToSector(uint32_t address)
 
 static int8_t BSP_Flash_CheckErased(uint32_t address, uint32_t size)
 {
-    const uint8_t *flash_data = (const uint8_t *)address;
+    const uint8_t* flash_data = (const uint8_t*)address;
     uint32_t i;
 
     for (i = 0U; i < size; i++)
@@ -364,6 +380,6 @@ static void BSP_Flash_InvalidateCache(uint32_t address, uint32_t size)
     end_address = (address + size + 31UL) & ~31UL;
     aligned_size = (int32_t)(end_address - aligned_address);
 
-    SCB_InvalidateDCache_by_Addr((uint32_t *)(uintptr_t)aligned_address, aligned_size);
+    SCB_InvalidateDCache_by_Addr((uint32_t*)(uintptr_t)aligned_address, aligned_size);
     SCB_InvalidateICache();
 }

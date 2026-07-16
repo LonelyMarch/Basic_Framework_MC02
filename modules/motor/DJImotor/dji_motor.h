@@ -49,7 +49,7 @@ typedef struct
     DJIMotorControlMode_e control_mode;
     DJIMotorFeedbackSource_e feedback_source;
     volatile const float* position_feedback_ptr; // external 时单位 degree
-    volatile const float* speed_feedback_ptr;    // external 时单位 degree/s
+    volatile const float* speed_feedback_ptr; // external 时单位 degree/s
     PID_Init_Config_s position_pid;
     PID_Init_Config_s speed_pid;
 } DJIMotor_Init_Config_s;
@@ -57,18 +57,18 @@ typedef struct
 typedef struct
 {
     uint16_t last_ecd;
-    uint16_t ecd;                    // 协议原始机械角度 0~8191
-    int16_t speed_rpm;               // 协议原始转速 rpm
-    int16_t torque_current_raw;      // 协议原始转矩电流
-    uint8_t temperature;             // C620/GM6020 有效，C610 无此字段
+    uint16_t ecd; // 协议原始机械角度 0~8191
+    int16_t speed_rpm; // 协议原始转速 rpm
+    int16_t torque_current_raw; // 协议原始转矩电流
+    uint8_t temperature; // C620/GM6020 有效，C610 无此字段
     uint8_t temperature_valid;
     uint8_t feedback_initialized;
 
-    float angle_single_round;        // 绝对单圈角度，单位 degree
-    int32_t total_ecd;               // 相对首次反馈的累计编码器增量
-    float total_angle;               // 相对首次反馈的累计角度，单位 degree
-    float speed_aps;                 // 由 speed_rpm 换算，单位 degree/s
-    float torque_current_a;          // 按型号量程换算的转矩电流，单位 A
+    float angle_single_round; // 绝对单圈角度，单位 degree
+    int32_t total_ecd; // 相对首次反馈的累计编码器增量
+    float total_angle; // 相对首次反馈的累计角度，单位 degree
+    float speed_aps; // 由 speed_rpm 换算，单位 degree/s
+    float torque_current_a; // 按型号量程换算的转矩电流，单位 A
 } DJI_Motor_Measure_s;
 
 typedef struct
@@ -100,32 +100,44 @@ typedef struct
     float dt;
 } DJIMotorInstance;
 
+
 /* C610 + M2006：CAN 转矩电流控制，ID 1~8。 */
 DJIMotorInstance* DJIMotorInitM2006(const DJIMotor_Init_Config_s* config);
+
 
 /* C620 + M3508：CAN 转矩电流控制，ID 1~8。 */
 DJIMotorInstance* DJIMotorInitM3508(const DJIMotor_Init_Config_s* config);
 
+
 /* GM6020：CAN 转矩电压控制，ID 1~7。 */
 DJIMotorInstance* DJIMotorInitGM6020Voltage(const DJIMotor_Init_Config_s* config);
+
 
 /* GM6020：CAN 转矩电流控制，ID 1~7；需在 Assistant 中提前打开电流环。 */
 DJIMotorInstance* DJIMotorInitGM6020Current(const DJIMotor_Init_Config_s* config);
 
+
 /* 设置官方协议原始电流指令；函数会按注册模式自动限幅。 */
 void DJIMotorSetCurrentRaw(DJIMotorInstance* motor, int16_t current_raw);
+
 
 /* 仅适用于 GM6020 电压模式；函数会按官方范围自动限幅。 */
 void DJIMotorSetVoltageRaw(DJIMotorInstance* motor, int16_t voltage_raw);
 
+
 /* 仅适用于注册为 DJI_CONTROL_SPEED 的实例，单位 degree/s。 */
 void DJIMotorSetSpeed(DJIMotorInstance* motor, float speed_aps);
+
 
 /* 仅适用于注册为 DJI_CONTROL_POSITION 的实例，单位 degree。 */
 void DJIMotorSetPosition(DJIMotorInstance* motor, float position_degree);
 
+
 void DJIMotorStop(DJIMotorInstance* motor);
+
+
 void DJIMotorEnable(DJIMotorInstance* motor);
+
 
 /* 由统一 MotorControlTask 以 1kHz 调用，完成分组打包与发送。 */
 void DJIMotorControl(void);

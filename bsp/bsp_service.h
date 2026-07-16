@@ -6,7 +6,9 @@
 
 #define BSP_SERVICE_EVENT_CNT 64U
 
-typedef void (*BSPServiceEventCallback)(void *arg);
+
+typedef void (*BSPServiceEventCallback)(void* arg);
+
 
 /**
  * @brief 初始化BSP服务事件队列
@@ -15,13 +17,15 @@ typedef void (*BSPServiceEventCallback)(void *arg);
  */
 void BSPServiceInit(void);
 
+
 /**
  * @brief BSP服务任务入口
  *
  * @note 该任务统一处理BSP层轻量延后事件,例如USART/USB接收解析和GPIO EXTI回调。
  *       CAN接收由独立的CANProcessTask处理,避免高速CAN回调挤占通用BSP服务任务。
  */
-void BSPServiceTask(void *argument);
+void BSPServiceTask(void* argument);
+
 
 /**
  * @brief 从任务上下文投递一个BSP延后事件
@@ -30,7 +34,8 @@ void BSPServiceTask(void *argument);
  * @param arg      回调参数
  * @return uint8_t 1表示投递成功,0表示队列满或参数非法
  */
-uint8_t BSPServicePost(BSPServiceEventCallback callback, void *arg);
+uint8_t BSPServicePost(BSPServiceEventCallback callback, void* arg);
+
 
 /**
  * @brief 从中断上下文投递一个BSP延后事件
@@ -39,7 +44,8 @@ uint8_t BSPServicePost(BSPServiceEventCallback callback, void *arg);
  * @param arg      回调参数
  * @return uint8_t 1表示投递成功,0表示队列满或参数非法
  */
-uint8_t BSPServicePostFromISR(BSPServiceEventCallback callback, void *arg);
+uint8_t BSPServicePostFromISR(BSPServiceEventCallback callback, void* arg);
+
 
 /**
  * @brief 唤醒BSP服务任务处理已有待处理数据
@@ -49,6 +55,7 @@ uint8_t BSPServicePostFromISR(BSPServiceEventCallback callback, void *arg);
  */
 void BSPServiceNotify(void);
 
+
 /**
  * @brief 主动处理一次BSP服务事件
  *
@@ -56,6 +63,7 @@ void BSPServiceNotify(void);
  *       或在特定任务中手动泵一次BSP事件。
  */
 void BSPServiceProcess(void);
+
 
 /**
  * @brief 获取BSP服务事件队列溢出次数

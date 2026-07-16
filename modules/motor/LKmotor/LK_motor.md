@@ -4,7 +4,8 @@
 
 ## 任务与通信路径
 
-LK 电机不为每个物理电机创建任务。`application/robot_task.c` 中的 `motor_task` 约每 1 ms 调用一次 `MotorControlTask()`，后者统一调用 `LKMotorControl()`。
+LK 电机不为每个物理电机创建任务。`application/robot_task.c` 中的 `motor_task` 约每 1 ms 调用一次 `MotorControlTask()`
+，后者统一调用 `LKMotorControl()`。
 
 ```text
 应用任务设置目标或提交查询命令
@@ -49,13 +50,13 @@ typedef enum
 } LKMotor_Work_Mode_e;
 ```
 
-| 注册模式 | CAN协议 | 可用控制接口 |
-|---|---|---|
-| `LK_MOTOR_MODE_MULTI_TORQUE` | `0x280` 多电机转矩帧 | `LKMotorSetMultiTorque()` |
-| `LK_MOTOR_MODE_SINGLE_OPEN_TORQUE` | `0x140 + ID`，命令 `0xA0` | `LKMotorSetOpenTorque()` |
-| `LK_MOTOR_MODE_SINGLE_TORQUE` | `0x140 + ID`，命令 `0xA1` | `LKMotorSetTorque()` |
-| `LK_MOTOR_MODE_SINGLE_SPEED` | `0x140 + ID`，命令 `0xA2` | `LKMotorSetSpeed()` |
-| `LK_MOTOR_MODE_SINGLE_POSITION` | `0x140 + ID`，命令 `0xA3~0xA8` | 所有位置控制接口 |
+| 注册模式                               | CAN协议                       | 可用控制接口                    |
+|------------------------------------|-----------------------------|---------------------------|
+| `LK_MOTOR_MODE_MULTI_TORQUE`       | `0x280` 多电机转矩帧              | `LKMotorSetMultiTorque()` |
+| `LK_MOTOR_MODE_SINGLE_OPEN_TORQUE` | `0x140 + ID`，命令 `0xA0`      | `LKMotorSetOpenTorque()`  |
+| `LK_MOTOR_MODE_SINGLE_TORQUE`      | `0x140 + ID`，命令 `0xA1`      | `LKMotorSetTorque()`      |
+| `LK_MOTOR_MODE_SINGLE_SPEED`       | `0x140 + ID`，命令 `0xA2`      | `LKMotorSetSpeed()`       |
+| `LK_MOTOR_MODE_SINGLE_POSITION`    | `0x140 + ID`，命令 `0xA3~0xA8` | 所有位置控制接口                  |
 
 调用与注册模式不匹配的控制接口会返回 `HAL_ERROR`。实例处于停止状态时，单电机控制接口返回 `HAL_BUSY`，不会绕过停止状态发送新的控制目标。
 
@@ -115,19 +116,20 @@ LKMotorSetSpeed(motor, 30000); // 300.00 degree/s
 
 ## 单电机控制命令
 
-| 接口 | 命令 | 单位/范围 |
-|---|---|---|
-| `LKMotorSetOpenTorque()` | `0xA0` | 开环功率 `-1000~1000` |
-| `LKMotorSetTorque()` | `0xA1` | 转矩电流 `-2000~2000` |
-| `LKMotorSetSpeed()` | `0xA2` | `0.01 degree/s` |
-| `LKMotorSetMultiTurnPosition()` | `0xA3` | 多圈位置，`0.01 degree` |
-| `LKMotorSetMultiTurnPositionWithSpeed()` | `0xA4` | 多圈位置 + 最大速度 |
-| `LKMotorSetSingleTurnPosition()` | `0xA5` | 单圈位置 `0~35999` |
-| `LKMotorSetSingleTurnPositionWithSpeed()` | `0xA6` | 单圈位置 + 最大速度 |
-| `LKMotorSetIncrementPosition()` | `0xA7` | 增量位置，`0.01 degree` |
-| `LKMotorSetIncrementPositionWithSpeed()` | `0xA8` | 增量位置 + 最大速度 |
+| 接口                                        | 命令     | 单位/范围              |
+|-------------------------------------------|--------|--------------------|
+| `LKMotorSetOpenTorque()`                  | `0xA0` | 开环功率 `-1000~1000`  |
+| `LKMotorSetTorque()`                      | `0xA1` | 转矩电流 `-2000~2000`  |
+| `LKMotorSetSpeed()`                       | `0xA2` | `0.01 degree/s`    |
+| `LKMotorSetMultiTurnPosition()`           | `0xA3` | 多圈位置，`0.01 degree` |
+| `LKMotorSetMultiTurnPositionWithSpeed()`  | `0xA4` | 多圈位置 + 最大速度        |
+| `LKMotorSetSingleTurnPosition()`          | `0xA5` | 单圈位置 `0~35999`     |
+| `LKMotorSetSingleTurnPositionWithSpeed()` | `0xA6` | 单圈位置 + 最大速度        |
+| `LKMotorSetIncrementPosition()`           | `0xA7` | 增量位置，`0.01 degree` |
+| `LKMotorSetIncrementPositionWithSpeed()`  | `0xA8` | 增量位置 + 最大速度        |
 
-官方协议对不同系列的命令能力有限制：`0xA0` 仅适用于支持开环功率控制的 MS 系列，`0xA1` 仅适用于支持转矩闭环的 MF/MG 系列。注册模式必须与实际电机能力一致。
+官方协议对不同系列的命令能力有限制：`0xA0` 仅适用于支持开环功率控制的 MS 系列，`0xA1` 仅适用于支持转矩闭环的 MF/MG
+系列。注册模式必须与实际电机能力一致。
 
 ## 单电机命令队列
 
@@ -152,17 +154,18 @@ LKMotorOff(motor);
 
 行为随注册模式确定：
 
-| 接口 | 多电机模式 | 单电机模式 |
-|---|---|---|
-| `LKMotorStop()` | 将对应 `0x280` 槽位置零 | 高优先级发送 `0x81` |
-| `LKMotorEnable()` | 恢复周期控制，目标仍为零 | 若此前是 `0x81` 停止则发送 `0x88` |
-| `LKMotorOff()` | 等同于安全置零 | 高优先级发送 `0x80`，清除电机内部旧控制状态 |
+| 接口                | 多电机模式            | 单电机模式                     |
+|-------------------|------------------|---------------------------|
+| `LKMotorStop()`   | 将对应 `0x280` 槽位置零 | 高优先级发送 `0x81`             |
+| `LKMotorEnable()` | 恢复周期控制，目标仍为零     | 若此前是 `0x81` 停止则发送 `0x88`  |
+| `LKMotorOff()`    | 等同于安全置零          | 高优先级发送 `0x80`，清除电机内部旧控制状态 |
 
 调用 `LKMotorStop()` 或 `LKMotorOff()` 会清零模块侧参考值。停止后需要先调用 `LKMotorEnable()`，再设置新的控制目标。
 
 如果停止或关闭命令还没有成功提交到 CAN，`LKMotorEnable()` 会返回 `HAL_BUSY`，避免后发的恢复命令覆盖尚未发送的安全命令。
 
-如果实例因掉线自动执行了 `0x80` 关闭，反馈恢复后不会自动使能。此时 `LKMotorEnable()` 只解除模块侧停止锁，之后必须发送新的控制目标；不会用 `0x88` 恢复掉线前的旧目标。
+如果实例因掉线自动执行了 `0x80` 关闭，反馈恢复后不会自动使能。此时 `LKMotorEnable()` 只解除模块侧停止锁，之后必须发送新的控制目标；不会用
+`0x88` 恢复掉线前的旧目标。
 
 ## 掉线保护
 
@@ -208,32 +211,32 @@ delta < -8192  -> 正向跨圈，total_round++
 
 以下接口只适用于单电机协议实例；对 `LK_MOTOR_MODE_MULTI_TORQUE` 实例调用会返回 `HAL_ERROR`。
 
-| 接口 | 命令 | 结果 |
-|---|---|---|
-| `LKMotorReadPID()` | `0x30` | `measure.pid_param` |
-| `LKMotorWritePIDToRAM()` | `0x31` | 掉电失效 |
-| `LKMotorWritePIDToROM()` | `0x32` | 掉电保存，避免频繁写入 |
-| `LKMotorReadAcceleration()` | `0x33` | `measure.accel_dps2` |
-| `LKMotorWriteAccelerationToRAM()` | `0x34` | 写入 RAM |
-| `LKMotorReadEncoder()` | `0x90` | `measure.encoder` |
-| `LKMotorWriteEncoderZeroToROM()` | `0x91` | 写入编码器零偏 |
-| `LKMotorSetCurrentPositionAsZero()` | `0x19` | 写当前位置为 ROM 零点 |
-| `LKMotorReadMultiTurnAngle()` | `0x92` | `measure.multi_turn_angle_0p01deg` |
-| `LKMotorReadSingleTurnAngle()` | `0x94` | `measure.single_turn_angle_0p01deg` |
-| `LKMotorClearAngle()` | `0x95` | 清除驱动角度信息 |
-| `LKMotorReadStatus1AndError()` | `0x9A` | 温度、电压和错误状态 |
-| `LKMotorClearError()` | `0x9B` | 清除错误状态 |
-| `LKMotorReadStatus2()` | `0x9C` | 通用运动反馈 |
-| `LKMotorReadStatus3()` | `0x9D` | 三相电流 |
+| 接口                                  | 命令     | 结果                                  |
+|-------------------------------------|--------|-------------------------------------|
+| `LKMotorReadPID()`                  | `0x30` | `measure.pid_param`                 |
+| `LKMotorWritePIDToRAM()`            | `0x31` | 掉电失效                                |
+| `LKMotorWritePIDToROM()`            | `0x32` | 掉电保存，避免频繁写入                         |
+| `LKMotorReadAcceleration()`         | `0x33` | `measure.accel_dps2`                |
+| `LKMotorWriteAccelerationToRAM()`   | `0x34` | 写入 RAM                              |
+| `LKMotorReadEncoder()`              | `0x90` | `measure.encoder`                   |
+| `LKMotorWriteEncoderZeroToROM()`    | `0x91` | 写入编码器零偏                             |
+| `LKMotorSetCurrentPositionAsZero()` | `0x19` | 写当前位置为 ROM 零点                       |
+| `LKMotorReadMultiTurnAngle()`       | `0x92` | `measure.multi_turn_angle_0p01deg`  |
+| `LKMotorReadSingleTurnAngle()`      | `0x94` | `measure.single_turn_angle_0p01deg` |
+| `LKMotorClearAngle()`               | `0x95` | 清除驱动角度信息                            |
+| `LKMotorReadStatus1AndError()`      | `0x9A` | 温度、电压和错误状态                          |
+| `LKMotorClearError()`               | `0x9B` | 清除错误状态                              |
+| `LKMotorReadStatus2()`              | `0x9C` | 通用运动反馈                              |
+| `LKMotorReadStatus3()`              | `0x9D` | 三相电流                                |
 
 读取类命令是异步的。接口返回成功后，应等待电机回复，再通过 `LKMotorGetMeasure()` 获取最新快照。
 
 ## 文件
 
-| 文件 | 说明 |
-|---|---|
-| `LK9025.h` | 注册配置、固定模式、公开控制与查询接口 |
-| `LK9025.c` | CAN编解码、任务发送、队列、掉线保护和反馈解析 |
-| `LK-TECH电机CAN协议说明V2_3.pdf` | 官方 M 系列 CAN 协议 |
-| `报文格式.png` | `0x280` 多电机控制帧截图 |
-| `反馈报文.png` | 转矩控制反馈帧截图 |
+| 文件                         | 说明                       |
+|----------------------------|--------------------------|
+| `LK9025.h`                 | 注册配置、固定模式、公开控制与查询接口      |
+| `LK9025.c`                 | CAN编解码、任务发送、队列、掉线保护和反馈解析 |
+| `LK-TECH电机CAN协议说明V2_3.pdf` | 官方 M 系列 CAN 协议           |
+| `报文格式.png`                 | `0x280` 多电机控制帧截图         |
+| `反馈报文.png`                 | 转矩控制反馈帧截图                |

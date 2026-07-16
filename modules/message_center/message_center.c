@@ -15,10 +15,10 @@
  */
 struct MessageCenterPublisher
 {
-    uint8_t used;                                                       /*!< 当前静态池槽位是否已经被占用 */
-    uint8_t publisher_registered;                                       /*!< 是否已经有发布者显式注册过该topic */
-    uint16_t data_len;                                                  /*!< 该topic每条消息的有效字节数 */
-    MessageCenterSubscriber_t* first_subscriber;                        /*!< 订阅该topic的第一个订阅者 */
+    uint8_t used; /*!< 当前静态池槽位是否已经被占用 */
+    uint8_t publisher_registered; /*!< 是否已经有发布者显式注册过该topic */
+    uint16_t data_len; /*!< 该topic每条消息的有效字节数 */
+    MessageCenterSubscriber_t* first_subscriber; /*!< 订阅该topic的第一个订阅者 */
 };
 
 /**
@@ -30,16 +30,16 @@ struct MessageCenterPublisher
  */
 struct MessageCenterSubscriber
 {
-    uint8_t used;                                                       /*!< 当前静态池槽位是否已经被占用 */
-    uint8_t queue_depth;                                                /*!< 本订阅者Queue实际深度 */
-    uint16_t data_len;                                                  /*!< 每条消息的有效字节数 */
-    uint16_t queue_item_size;                                           /*!< FreeRTOS Queue item大小，等于topic消息长度 */
-    QueueHandle_t queue;                                                /*!< FreeRTOS静态Queue句柄 */
-    StaticQueue_t queue_cb;                                             /*!< FreeRTOS静态Queue控制块 */
+    uint8_t used; /*!< 当前静态池槽位是否已经被占用 */
+    uint8_t queue_depth; /*!< 本订阅者Queue实际深度 */
+    uint16_t data_len; /*!< 每条消息的有效字节数 */
+    uint16_t queue_item_size; /*!< FreeRTOS Queue item大小，等于topic消息长度 */
+    QueueHandle_t queue; /*!< FreeRTOS静态Queue句柄 */
+    StaticQueue_t queue_cb; /*!< FreeRTOS静态Queue控制块 */
     uint8_t queue_storage[MESSAGE_CENTER_MAX_QUEUE_DEPTH]
-                         [MESSAGE_CENTER_MAX_MESSAGE_BYTES];           /*!< Queue底层存储区 */
-    MessageCenterSubscriber_t* next_subscriber;                         /*!< 同topic下一个订阅者 */
-    uint32_t dropped_count;                                             /*!< Queue满时丢弃旧消息的计数 */
+    [MESSAGE_CENTER_MAX_MESSAGE_BYTES]; /*!< Queue底层存储区 */
+    MessageCenterSubscriber_t* next_subscriber; /*!< 同topic下一个订阅者 */
+    uint32_t dropped_count; /*!< Queue满时丢弃旧消息的计数 */
 };
 
 static MessageCenterPublisher_t publisher_pool[MESSAGE_TOPIC_COUNT];

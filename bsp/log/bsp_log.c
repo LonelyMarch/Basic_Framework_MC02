@@ -14,8 +14,8 @@
 
 typedef struct
 {
-    uint16_t len;                   // 当前日志实际长度
-    char text[BSP_LOG_LINE_SIZE];   // 已完成格式化的短日志
+    uint16_t len; // 当前日志实际长度
+    char text[BSP_LOG_LINE_SIZE]; // 已完成格式化的短日志
 } BSPLogMessage;
 
 static BSPLogMessage log_queue[BSP_LOG_QUEUE_SIZE];
@@ -43,7 +43,7 @@ static uint8_t BSPLogKernelIsRunning(void)
     return osKernelGetState() == osKernelRunning;
 }
 
-static void BSPLogDirectWrite(const char *text, uint16_t len)
+static void BSPLogDirectWrite(const char* text, uint16_t len)
 {
     if (text == NULL || len == 0U)
     {
@@ -57,11 +57,11 @@ static void BSPLogDirectWrite(const char *text, uint16_t len)
     (void)SEGGER_RTT_Write(BUFFER_INDEX, text, len);
 
 #if BSP_LOG_USE_USB
-    (void)USBTransmit((const uint8_t *)text, len);
+    (void)USBTransmit((const uint8_t*)text, len);
 #endif
 }
 
-static uint8_t BSPLogPush(const char *text, uint16_t len)
+static uint8_t BSPLogPush(const char* text, uint16_t len)
 {
     uint8_t ret = 0U;
     uint32_t primask;
@@ -111,7 +111,7 @@ static uint8_t BSPLogPush(const char *text, uint16_t len)
     return ret;
 }
 
-static int BSPLogVPrintf(const char *type, const char *color, const char *format, va_list args)
+static int BSPLogVPrintf(const char* type, const char* color, const char* format, va_list args)
 {
     char line[BSP_LOG_LINE_SIZE];
     int prefix_len;
@@ -237,7 +237,7 @@ uint32_t BSPLogGetDroppedCount(void)
     return log_dropped_cnt;
 }
 
-int BSPLogPrintf(const char *type, const char *color, const char *format, ...)
+int BSPLogPrintf(const char* type, const char* color, const char* format, ...)
 {
     int n;
     va_list args;
@@ -249,7 +249,7 @@ int BSPLogPrintf(const char *type, const char *color, const char *format, ...)
     return n;
 }
 
-int PrintLog(const char *fmt, ...)
+int PrintLog(const char* fmt, ...)
 {
     int n;
     va_list args;

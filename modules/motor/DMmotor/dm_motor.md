@@ -12,7 +12,8 @@
 - E-MIT（EMIT）力位混控模式；
 - 一拖四固件的广播电流模式。
 
-所有实例由统一的 `MotorControlTask()` 管理，不为每个物理电机创建任务。`application/robot_task.c` 中的 `motor_task` 约每 1 ms 调用一次 `MotorControlTask()`，随后调用 `DMMotorControl()` 完成全部 DM 实例的周期发送。
+所有实例由统一的 `MotorControlTask()` 管理，不为每个物理电机创建任务。`application/robot_task.c` 中的 `motor_task` 约每 1
+ms 调用一次 `MotorControlTask()`，随后调用 `DMMotorControl()` 完成全部 DM 实例的周期发送。
 
 CAN 接收中断只把报文复制到 BSP 队列；`CANProcessTask()`在任务上下文中调用本模块的反馈解析函数。
 
@@ -47,12 +48,12 @@ FDCAN 硬件 TX FIFO 异步发送
 
 ## 3. 传统控制模式
 
-| 注册接口 | 发送 ID | DLC | 控制内容 |
-|---|---:|---:|---|
-| `DMMotorInitMIT()` | `CAN_ID` | 8 | 位置16位、速度12位、Kp12位、Kd12位、前馈扭矩12位 |
-| `DMMotorInitPosVel()` | `0x100 + CAN_ID` | 8 | 小端float位置、小端float速度上限 |
-| `DMMotorInitVel()` | `0x200 + CAN_ID` | 4 | 小端float速度 |
-| `DMMotorInitEmit()` | `0x300 + CAN_ID` | 8 | 小端float位置、速度限幅、电流限幅标幺值 |
+| 注册接口                  |            发送 ID | DLC | 控制内容                            |
+|-----------------------|-----------------:|----:|---------------------------------|
+| `DMMotorInitMIT()`    |         `CAN_ID` |   8 | 位置16位、速度12位、Kp12位、Kd12位、前馈扭矩12位 |
+| `DMMotorInitPosVel()` | `0x100 + CAN_ID` |   8 | 小端float位置、小端float速度上限           |
+| `DMMotorInitVel()`    | `0x200 + CAN_ID` |   4 | 小端float速度                       |
+| `DMMotorInitEmit()`   | `0x300 + CAN_ID` |   8 | 小端float位置、速度限幅、电流限幅标幺值          |
 
 模式在注册时由不同初始化接口确定，运行期不提供模式切换接口。
 
@@ -70,7 +71,8 @@ FDCAN 硬件 TX FIFO 异步发送
 
 ### 3.2 E-MIT最大电流
 
-`DMMotorEmitArgs.imax`必须显式配置为电机上电打印或调试助手中显示的最大电流，且必须大于0。模块不提供默认 Imax，因为不同 DM 型号的最大电流并不相同。
+`DMMotorEmitArgs.imax`必须显式配置为电机上电打印或调试助手中显示的最大电流，且必须大于0。模块不提供默认 Imax，因为不同 DM
+型号的最大电流并不相同。
 
 E-MIT发送的电流字段计算方式为：
 
@@ -86,16 +88,16 @@ i_des = cur_limit / imax × 10000
 
 固定映射如下：
 
-| 广播发送 ID | 槽位 | 反馈 ID |
-|---:|---:|---:|
-| `0x3FE` | 0 | `0x301` |
-| `0x3FE` | 1 | `0x302` |
-| `0x3FE` | 2 | `0x303` |
-| `0x3FE` | 3 | `0x304` |
-| `0x4FE` | 0 | `0x305` |
-| `0x4FE` | 1 | `0x306` |
-| `0x4FE` | 2 | `0x307` |
-| `0x4FE` | 3 | `0x308` |
+| 广播发送 ID | 槽位 |   反馈 ID |
+|--------:|---:|--------:|
+| `0x3FE` |  0 | `0x301` |
+| `0x3FE` |  1 | `0x302` |
+| `0x3FE` |  2 | `0x303` |
+| `0x3FE` |  3 | `0x304` |
+| `0x4FE` |  0 | `0x305` |
+| `0x4FE` |  1 | `0x306` |
+| `0x4FE` |  2 | `0x307` |
+| `0x4FE` |  3 | `0x308` |
 
 注册时会校验广播 ID、槽位和反馈 ID 的对应关系，并禁止同一路 FDCAN、同一个广播 ID 下重复注册同一槽位。
 

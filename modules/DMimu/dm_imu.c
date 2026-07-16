@@ -39,7 +39,16 @@
 #define DM_IMU_TEMPERATURE_MAX_C             60.0F
 
 /* DM-IMU的RS485主动协议直接传输IEEE754单精度原始字节，编译期锁定float尺寸。 */
-_Static_assert(sizeof(float) == 4U, "DM-IMU protocol requires 32-bit float");
+_Static_assert (
+sizeof
+(
+float
+)
+==
+4U
+,
+"DM-IMU protocol requires 32-bit float"
+);
 
 /**
  * @brief 驱动内部实例结构体。
@@ -58,10 +67,10 @@ struct DMIMUInstance
     uint8_t last_request_register;
     uint8_t last_request_operation;
 
-    CANInstance *can_instance;
+    CANInstance* can_instance;
     float can_transmit_timeout_ms;
 
-    USARTInstance *usart_instance;
+    USARTInstance* usart_instance;
     USART_TRANSFER_MODE rs485_transfer_mode;
     uint8_t rs485_slave_id;
     uint8_t rs485_stream[DM_IMU_RS485_STREAM_SIZE];
@@ -70,7 +79,7 @@ struct DMIMUInstance
 
 static DMIMUInstance dm_imu_instance_pool[DM_IMU_MAX_INSTANCE_COUNT];
 static uint8_t dm_imu_instance_count;
-static DMIMUInstance *dm_imu_rs485_instances[DM_IMU_MAX_RS485_INSTANCE_COUNT];
+static DMIMUInstance* dm_imu_rs485_instances[DM_IMU_MAX_RS485_INSTANCE_COUNT];
 static uint8_t dm_imu_rs485_instance_count;
 
 /**
@@ -78,7 +87,7 @@ static uint8_t dm_imu_rs485_instance_count;
  *
  * @param primask 输出进入临界区之前的中断屏蔽状态。
  */
-static void DMIMUEnterCritical(uint32_t *primask)
+static void DMIMUEnterCritical(uint32_t* primask)
 {
     if (primask == NULL)
     {
@@ -118,7 +127,7 @@ static float DMIMUUnsignedToFloat(uint32_t raw, float minimum, float maximum, ui
 /**
  * @brief 按小端序读取16位整数。
  */
-static uint16_t DMIMUReadU16LE(const uint8_t *data)
+static uint16_t DMIMUReadU16LE(const uint8_t* data)
 {
     return (uint16_t)data[0] | ((uint16_t)data[1] << 8U);
 }
@@ -126,12 +135,12 @@ static uint16_t DMIMUReadU16LE(const uint8_t *data)
 /**
  * @brief 按小端序读取32位整数。
  */
-static uint32_t DMIMUReadU32LE(const uint8_t *data)
+static uint32_t DMIMUReadU32LE(const uint8_t* data)
 {
     return (uint32_t)data[0] |
-           ((uint32_t)data[1] << 8U) |
-           ((uint32_t)data[2] << 16U) |
-           ((uint32_t)data[3] << 24U);
+        ((uint32_t)data[1] << 8U) |
+        ((uint32_t)data[2] << 16U) |
+        ((uint32_t)data[3] << 24U);
 }
 
 /**
@@ -140,7 +149,7 @@ static uint32_t DMIMUReadU32LE(const uint8_t *data)
  * @param data 四字节原始数据。
  * @return float 解码结果。
  */
-static float DMIMUReadFloatLE(const uint8_t *data)
+static float DMIMUReadFloatLE(const uint8_t* data)
 {
     uint32_t raw = DMIMUReadU32LE(data);
     float value;
@@ -152,7 +161,7 @@ static float DMIMUReadFloatLE(const uint8_t *data)
 /**
  * @brief 把32位整数按小端序写入发送帧。
  */
-static void DMIMUWriteU32LE(uint8_t *data, uint32_t value)
+static void DMIMUWriteU32LE(uint8_t* data, uint32_t value)
 {
     data[0] = (uint8_t)value;
     data[1] = (uint8_t)(value >> 8U);
@@ -185,7 +194,7 @@ static uint16_t DMIMUCRC16TableEntry(uint8_t index)
  *
  * @note 初值0xFFFF、多项式0x1021，与PDF附录的表内容一致。
  */
-static uint16_t DMIMUCRC16Standard(const uint8_t *data, uint16_t length)
+static uint16_t DMIMUCRC16Standard(const uint8_t* data, uint16_t length)
 {
     uint16_t crc = 0xFFFFU;
 
@@ -204,7 +213,7 @@ static uint16_t DMIMUCRC16Standard(const uint8_t *data, uint16_t length)
  * @note PDF示例写作“crc << 1”，与常见CCITT查表实现的“crc << 8”不同。
  *       PDF内上位机截图中的实际数据可验证设备采用本算法，并以低字节在前发送CRC。
  */
-static uint16_t DMIMUCRC16DocumentVariant(const uint8_t *data, uint16_t length)
+static uint16_t DMIMUCRC16DocumentVariant(const uint8_t* data, uint16_t length)
 {
     uint16_t crc = 0xFFFFU;
 
@@ -225,14 +234,14 @@ static uint16_t DMIMUCRC16DocumentVariant(const uint8_t *data, uint16_t length)
  * @param compatibility 输出是否通过PDF原样算法或相反字节序通过。
  * @return uint8_t CRC匹配返回1，否则返回0。
  */
-static uint8_t DMIMUValidateActiveCRC(const uint8_t *frame,
+static uint8_t DMIMUValidateActiveCRC(const uint8_t* frame,
                                       uint16_t frame_length,
-                                      uint8_t *compatibility)
+                                      uint8_t* compatibility)
 {
     uint16_t payload_length = (uint16_t)(frame_length - 3U);
     uint16_t received_le = DMIMUReadU16LE(&frame[payload_length]);
     uint16_t received_be = (uint16_t)frame[payload_length + 1U] |
-                           ((uint16_t)frame[payload_length] << 8U);
+        ((uint16_t)frame[payload_length] << 8U);
     uint16_t standard_crc = DMIMUCRC16Standard(frame, payload_length);
     uint16_t document_crc = DMIMUCRC16DocumentVariant(frame, payload_length);
 
@@ -262,7 +271,7 @@ static uint8_t DMIMUValidateActiveCRC(const uint8_t *frame,
 /**
  * @brief 记录一帧合法接收，刷新实例在线时间。
  */
-static void DMIMURecordValidReceive(DMIMUInstance *instance)
+static void DMIMURecordValidReceive(DMIMUInstance* instance)
 {
     uint32_t primask;
 
@@ -276,7 +285,7 @@ static void DMIMURecordValidReceive(DMIMUInstance *instance)
 /**
  * @brief 发布三轴加速度及可选温度。
  */
-static void DMIMUPublishAccel(DMIMUInstance *instance,
+static void DMIMUPublishAccel(DMIMUInstance* instance,
                               const float accel[3],
                               uint8_t has_temperature,
                               uint8_t temperature_raw)
@@ -304,7 +313,7 @@ static void DMIMUPublishAccel(DMIMUInstance *instance,
 /**
  * @brief 发布三轴角速度。
  */
-static void DMIMUPublishGyro(DMIMUInstance *instance, const float gyro[3])
+static void DMIMUPublishGyro(DMIMUInstance* instance, const float gyro[3])
 {
     uint32_t primask;
 
@@ -320,7 +329,7 @@ static void DMIMUPublishGyro(DMIMUInstance *instance, const float gyro[3])
 /**
  * @brief 发布欧拉角，公共接口统一为roll、pitch、yaw字段。
  */
-static void DMIMUPublishEuler(DMIMUInstance *instance, float roll, float pitch, float yaw)
+static void DMIMUPublishEuler(DMIMUInstance* instance, float roll, float pitch, float yaw)
 {
     uint32_t primask;
 
@@ -338,7 +347,7 @@ static void DMIMUPublishEuler(DMIMUInstance *instance, float roll, float pitch, 
 /**
  * @brief 发布w、x、y、z四元数。
  */
-static void DMIMUPublishQuaternion(DMIMUInstance *instance, const float quaternion[4])
+static void DMIMUPublishQuaternion(DMIMUInstance* instance, const float quaternion[4])
 {
     uint32_t primask;
 
@@ -354,7 +363,7 @@ static void DMIMUPublishQuaternion(DMIMUInstance *instance, const float quaterni
 /**
  * @brief 保存寄存器应答快照。
  */
-static void DMIMUPublishRegisterResponse(DMIMUInstance *instance,
+static void DMIMUPublishRegisterResponse(DMIMUInstance* instance,
                                          uint8_t register_id,
                                          uint8_t operation,
                                          uint8_t ack,
@@ -378,7 +387,7 @@ static void DMIMUPublishRegisterResponse(DMIMUInstance *instance,
 /**
  * @brief 判断一组浮点值是否全部有限。
  */
-static uint8_t DMIMUFloatsAreFinite(const float *values, uint8_t count)
+static uint8_t DMIMUFloatsAreFinite(const float* values, uint8_t count)
 {
     for (uint8_t index = 0U; index < count; ++index)
     {
@@ -396,7 +405,7 @@ static uint8_t DMIMUFloatsAreFinite(const float *values, uint8_t count)
  *
  * @note PDF第10页规定DATA[2:7]为三个16位小端映射值；DATA[1]为温度原始字节。
  */
-static void DMIMUDecodeCANAccel(DMIMUInstance *instance, const uint8_t *data)
+static void DMIMUDecodeCANAccel(DMIMUInstance* instance, const uint8_t* data)
 {
     float accel[3];
 
@@ -404,9 +413,9 @@ static void DMIMUDecodeCANAccel(DMIMUInstance *instance, const uint8_t *data)
     {
         uint16_t raw = DMIMUReadU16LE(&data[2U + axis * 2U]);
         accel[axis] = DMIMUUnsignedToFloat(raw,
-                                          DM_IMU_ACCEL_MIN_MPS2,
-                                          DM_IMU_ACCEL_MAX_MPS2,
-                                          16U);
+                                           DM_IMU_ACCEL_MIN_MPS2,
+                                           DM_IMU_ACCEL_MAX_MPS2,
+                                           16U);
     }
 
     DMIMUPublishAccel(instance, accel, 1U, data[1]);
@@ -415,7 +424,7 @@ static void DMIMUDecodeCANAccel(DMIMUInstance *instance, const uint8_t *data)
 /**
  * @brief 解析CAN角速度帧。
  */
-static void DMIMUDecodeCANGyro(DMIMUInstance *instance, const uint8_t *data)
+static void DMIMUDecodeCANGyro(DMIMUInstance* instance, const uint8_t* data)
 {
     float gyro[3];
 
@@ -423,9 +432,9 @@ static void DMIMUDecodeCANGyro(DMIMUInstance *instance, const uint8_t *data)
     {
         uint16_t raw = DMIMUReadU16LE(&data[2U + axis * 2U]);
         gyro[axis] = DMIMUUnsignedToFloat(raw,
-                                         DM_IMU_GYRO_MIN_RAD_S,
-                                         DM_IMU_GYRO_MAX_RAD_S,
-                                         16U);
+                                          DM_IMU_GYRO_MIN_RAD_S,
+                                          DM_IMU_GYRO_MAX_RAD_S,
+                                          16U);
     }
 
     DMIMUPublishGyro(instance, gyro);
@@ -436,7 +445,7 @@ static void DMIMUDecodeCANGyro(DMIMUInstance *instance, const uint8_t *data)
  *
  * @note CAN顺序由PDF规定为Pitch、Yaw、Roll，与RS485主动浮点帧的Roll、Pitch、Yaw不同。
  */
-static void DMIMUDecodeCANEuler(DMIMUInstance *instance, const uint8_t *data)
+static void DMIMUDecodeCANEuler(DMIMUInstance* instance, const uint8_t* data)
 {
     float pitch = DMIMUUnsignedToFloat(DMIMUReadU16LE(&data[2]),
                                        DM_IMU_PITCH_MIN_DEG,
@@ -460,18 +469,18 @@ static void DMIMUDecodeCANEuler(DMIMUInstance *instance, const uint8_t *data)
  * @note PDF第10页将四个14位值连续压入DATA[1:7]。官方示例对W低6位使用0xF8，
  *       会遗漏DATA[2]的bit2；这里按PDF位域表使用0xFC完整提取W[5:0]。
  */
-static void DMIMUDecodeCANQuaternion(DMIMUInstance *instance, const uint8_t *data)
+static void DMIMUDecodeCANQuaternion(DMIMUInstance* instance, const uint8_t* data)
 {
     uint16_t raw[4];
     float quaternion[4];
 
     raw[0] = ((uint16_t)data[1] << 6U) | ((uint16_t)(data[2] & 0xFCU) >> 2U);
     raw[1] = ((uint16_t)(data[2] & 0x03U) << 12U) |
-             ((uint16_t)data[3] << 4U) |
-             ((uint16_t)(data[4] & 0xF0U) >> 4U);
+        ((uint16_t)data[3] << 4U) |
+        ((uint16_t)(data[4] & 0xF0U) >> 4U);
     raw[2] = ((uint16_t)(data[4] & 0x0FU) << 10U) |
-             ((uint16_t)data[5] << 2U) |
-             ((uint16_t)(data[6] & 0xC0U) >> 6U);
+        ((uint16_t)data[5] << 2U) |
+        ((uint16_t)(data[6] & 0xC0U) >> 6U);
     raw[3] = ((uint16_t)(data[6] & 0x3FU) << 8U) | data[7];
 
     for (uint8_t index = 0U; index < 4U; ++index)
@@ -488,17 +497,17 @@ static void DMIMUDecodeCANQuaternion(DMIMUInstance *instance, const uint8_t *dat
 /**
  * @brief BSP CAN任务上下文中的DM-IMU接收回调。
  */
-static void DMIMUCANReceiveCallback(CANInstance *can_instance)
+static void DMIMUCANReceiveCallback(CANInstance* can_instance)
 {
-    DMIMUInstance *instance;
-    const uint8_t *data;
+    DMIMUInstance* instance;
+    const uint8_t* data;
 
     if (can_instance == NULL || can_instance->id == NULL)
     {
         return;
     }
 
-    instance = (DMIMUInstance *)can_instance->id;
+    instance = (DMIMUInstance*)can_instance->id;
     data = can_instance->rx_buff;
 
     if (can_instance->rx_len != DM_IMU_CAN_FRAME_LENGTH)
@@ -551,8 +560,8 @@ static void DMIMUCANReceiveCallback(CANInstance *can_instance)
 /**
  * @brief 解析RS485主动模式浮点数据帧。
  */
-static void DMIMUDecodeRS485ActiveFrame(DMIMUInstance *instance,
-                                        const uint8_t *frame,
+static void DMIMUDecodeRS485ActiveFrame(DMIMUInstance* instance,
+                                        const uint8_t* frame,
                                         DMIMUDataType_e data_type)
 {
     float values[4];
@@ -597,7 +606,7 @@ static void DMIMUDecodeRS485ActiveFrame(DMIMUInstance *instance,
 /**
  * @brief 解析RS485应答模式的24字节A5...5A帧。
  */
-static void DMIMUDecodeRS485ResponseFrame(DMIMUInstance *instance, const uint8_t *frame)
+static void DMIMUDecodeRS485ResponseFrame(DMIMUInstance* instance, const uint8_t* frame)
 {
     uint8_t type = frame[1];
     uint8_t register_id = frame[3];
@@ -661,7 +670,7 @@ static void DMIMUDecodeRS485ResponseFrame(DMIMUInstance *instance, const uint8_t
 /**
  * @brief 从RS485流缓存头部移除指定字节。
  */
-static void DMIMURS485Consume(DMIMUInstance *instance, uint16_t length)
+static void DMIMURS485Consume(DMIMUInstance* instance, uint16_t length)
 {
     if (length >= instance->rs485_stream_length)
     {
@@ -681,11 +690,11 @@ static void DMIMURS485Consume(DMIMUInstance *instance, uint16_t length)
  * @note 同一实例可同时识别两种帧格式，因此设备在上位机中切换主动/应答模式后，
  *       STM32驱动不需要切换解析器状态。
  */
-static void DMIMUParseRS485Stream(DMIMUInstance *instance)
+static void DMIMUParseRS485Stream(DMIMUInstance* instance)
 {
     while (instance->rs485_stream_length > 0U)
     {
-        uint8_t *stream = instance->rs485_stream;
+        uint8_t* stream = instance->rs485_stream;
 
         if (stream[0] == DM_IMU_RS485_ACTIVE_HEAD_1)
         {
@@ -781,7 +790,7 @@ static void DMIMUParseRS485Stream(DMIMUInstance *instance)
  */
 static void DMIMURS485Receive(uint8_t callback_index)
 {
-    DMIMUInstance *instance;
+    DMIMUInstance* instance;
     uint16_t copy_length;
 
     if (callback_index >= dm_imu_rs485_instance_count)
@@ -826,7 +835,7 @@ static void DMIMURS485Receive1(void) { DMIMURS485Receive(1U); }
 /**
  * @brief 通过注册时固定的物理接口发送一条原始寄存器请求。
  */
-static uint8_t DMIMUSendRegister(DMIMUInstance *instance,
+static uint8_t DMIMUSendRegister(DMIMUInstance* instance,
                                  uint8_t rs485_type,
                                  uint8_t register_id,
                                  uint8_t operation,
@@ -836,7 +845,7 @@ static uint8_t DMIMUSendRegister(DMIMUInstance *instance,
 
     if (instance->transport == DM_IMU_TRANSPORT_CAN)
     {
-        uint8_t *frame = instance->can_instance->tx_buff;
+        uint8_t* frame = instance->can_instance->tx_buff;
 
         memset(frame, 0, DM_IMU_CAN_FRAME_LENGTH);
         frame[0] = DM_IMU_CAN_REQUEST_HEAD;
@@ -882,7 +891,7 @@ static uint8_t DMIMUSendRegister(DMIMUInstance *instance,
 /**
  * @brief 将公共命令映射到CAN寄存器编号。
  */
-static uint8_t DMIMUMapCANCommand(DMIMUCommand_e command, uint8_t *register_id)
+static uint8_t DMIMUMapCANCommand(DMIMUCommand_e command, uint8_t* register_id)
 {
     switch (command)
     {
@@ -920,7 +929,7 @@ static uint8_t DMIMUMapCANCommand(DMIMUCommand_e command, uint8_t *register_id)
 /**
  * @brief 将公共命令映射到RS485指令域寄存器编号。
  */
-static uint8_t DMIMUMapRS485Command(DMIMUCommand_e command, uint8_t *register_id)
+static uint8_t DMIMUMapRS485Command(DMIMUCommand_e command, uint8_t* register_id)
 {
     switch (command)
     {
@@ -958,9 +967,9 @@ static uint8_t DMIMUMapRS485Command(DMIMUCommand_e command, uint8_t *register_id
 /**
  * @brief 注册一个外部DM-IMU-L1实例。
  */
-DMIMUInstance *DMIMURegister(const DMIMU_Init_Config_s *config)
+DMIMUInstance* DMIMURegister(const DMIMU_Init_Config_s* config)
 {
-    DMIMUInstance *instance;
+    DMIMUInstance* instance;
 
     if (config == NULL || dm_imu_instance_count >= DM_IMU_MAX_INSTANCE_COUNT)
     {
@@ -1015,8 +1024,8 @@ DMIMUInstance *DMIMURegister(const DMIMU_Init_Config_s *config)
         if (config->communication.rs485.uart_handle == NULL ||
             dm_imu_rs485_instance_count >= DM_IMU_MAX_RS485_INSTANCE_COUNT ||
             (config->communication.rs485.transfer_mode != USART_TRANSFER_BLOCKING &&
-             config->communication.rs485.transfer_mode != USART_TRANSFER_IT &&
-             config->communication.rs485.transfer_mode != USART_TRANSFER_DMA))
+                config->communication.rs485.transfer_mode != USART_TRANSFER_IT &&
+                config->communication.rs485.transfer_mode != USART_TRANSFER_DMA))
         {
             LOGERROR("[dm_imu] invalid RS485 config");
             return NULL;
@@ -1056,7 +1065,7 @@ DMIMUInstance *DMIMURegister(const DMIMU_Init_Config_s *config)
 /**
  * @brief 获取实例注册时固定的通信接口。
  */
-DMIMUTransport_e DMIMUGetTransport(const DMIMUInstance *instance)
+DMIMUTransport_e DMIMUGetTransport(const DMIMUInstance* instance)
 {
     return instance == NULL ? DM_IMU_TRANSPORT_INVALID : instance->transport;
 }
@@ -1064,7 +1073,7 @@ DMIMUTransport_e DMIMUGetTransport(const DMIMUInstance *instance)
 /**
  * @brief 获取线程安全的完整测量快照。
  */
-uint8_t DMIMUGetMeasure(const DMIMUInstance *instance, DMIMUMeasure_s *measure)
+uint8_t DMIMUGetMeasure(const DMIMUInstance* instance, DMIMUMeasure_s* measure)
 {
     uint32_t primask;
 
@@ -1082,7 +1091,7 @@ uint8_t DMIMUGetMeasure(const DMIMUInstance *instance, DMIMUMeasure_s *measure)
 /**
  * @brief 获取最近一次寄存器应答。
  */
-uint8_t DMIMUGetRegisterResponse(const DMIMUInstance *instance, DMIMURegisterResponse_s *response)
+uint8_t DMIMUGetRegisterResponse(const DMIMUInstance* instance, DMIMURegisterResponse_s* response)
 {
     uint32_t primask;
 
@@ -1105,7 +1114,7 @@ uint8_t DMIMUGetRegisterResponse(const DMIMUInstance *instance, DMIMURegisterRes
 /**
  * @brief 判断实例是否在线。
  */
-uint8_t DMIMUIsOnline(const DMIMUInstance *instance)
+uint8_t DMIMUIsOnline(const DMIMUInstance* instance)
 {
     uint8_t has_received;
     uint32_t last_tick;
@@ -1130,7 +1139,7 @@ uint8_t DMIMUIsOnline(const DMIMUInstance *instance)
 /**
  * @brief 判断指定类型的传感器数据是否新鲜。
  */
-uint8_t DMIMUIsDataFresh(const DMIMUInstance *instance,
+uint8_t DMIMUIsDataFresh(const DMIMUInstance* instance,
                          DMIMUDataType_e data_type,
                          uint32_t timeout_ms)
 {
@@ -1184,7 +1193,7 @@ uint8_t DMIMUIsDataFresh(const DMIMUInstance *instance,
 /**
  * @brief 在请求模式下请求一种传感器数据。
  */
-uint8_t DMIMURequestData(DMIMUInstance *instance, DMIMUDataType_e data_type)
+uint8_t DMIMURequestData(DMIMUInstance* instance, DMIMUDataType_e data_type)
 {
     uint8_t register_id;
     uint8_t rs485_type;
@@ -1216,7 +1225,7 @@ uint8_t DMIMURequestData(DMIMUInstance *instance, DMIMUDataType_e data_type)
 /**
  * @brief 执行一个CAN和RS485共有的高层命令。
  */
-uint8_t DMIMUExecuteCommand(DMIMUInstance *instance,
+uint8_t DMIMUExecuteCommand(DMIMUInstance* instance,
                             DMIMUCommand_e command,
                             uint32_t value)
 {
@@ -1253,7 +1262,7 @@ uint8_t DMIMUExecuteCommand(DMIMUInstance *instance,
 /**
  * @brief 获取运行统计快照。
  */
-uint8_t DMIMUGetStatistics(const DMIMUInstance *instance, DMIMUStatistics_s *statistics)
+uint8_t DMIMUGetStatistics(const DMIMUInstance* instance, DMIMUStatistics_s* statistics)
 {
     uint32_t primask;
 

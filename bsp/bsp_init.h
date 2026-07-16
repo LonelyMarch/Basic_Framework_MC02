@@ -13,6 +13,7 @@
  */
 void BSPInit(void);
 
+
 /**
  * @brief 创建BSP运行期资源和后台任务。
  */

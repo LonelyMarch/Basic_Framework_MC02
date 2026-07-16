@@ -17,10 +17,10 @@
 
 struct HTMRS485Bus
 {
-    USARTInstance *usart;
+    USARTInstance* usart;
     USART_TRANSFER_MODE transfer_mode;
-    HTMMotorInstance *motors[HTM_RS485_MOTOR_PER_BUS];
-    HTMMotorInstance *in_flight_motor;
+    HTMMotorInstance* motors[HTM_RS485_MOTOR_PER_BUS];
+    HTMMotorInstance* in_flight_motor;
     uint8_t motor_count;
     uint8_t round_robin_index;
     uint8_t packet_sequence;
@@ -35,7 +35,7 @@ struct HTMRS485Bus
 static HTMRS485Bus htm_bus_pool[HTM_RS485_BUS_CNT];
 static uint8_t htm_bus_count;
 
-static uint16_t HTMCRC16Modbus(const uint8_t *data, uint16_t len)
+static uint16_t HTMCRC16Modbus(const uint8_t* data, uint16_t len)
 {
     uint16_t crc = 0xFFFFU;
 
@@ -48,7 +48,7 @@ static uint16_t HTMCRC16Modbus(const uint8_t *data, uint16_t len)
     return crc;
 }
 
-static HTMMotorInstance *HTMFindMotor(HTMRS485Bus *bus, uint8_t address)
+static HTMMotorInstance* HTMFindMotor(HTMRS485Bus* bus, uint8_t address)
 {
     for (uint8_t i = 0U; i < bus->motor_count; ++i)
     {
@@ -58,18 +58,18 @@ static HTMMotorInstance *HTMFindMotor(HTMRS485Bus *bus, uint8_t address)
     return NULL;
 }
 
-static int16_t HTMReadI16(const uint8_t *data)
+static int16_t HTMReadI16(const uint8_t* data)
 {
     return (int16_t)((uint16_t)data[0] | ((uint16_t)data[1] << 8U));
 }
 
-static int32_t HTMReadI32(const uint8_t *data)
+static int32_t HTMReadI32(const uint8_t* data)
 {
     return (int32_t)((uint32_t)data[0] | ((uint32_t)data[1] << 8U) |
-                     ((uint32_t)data[2] << 16U) | ((uint32_t)data[3] << 24U));
+        ((uint32_t)data[2] << 16U) | ((uint32_t)data[3] << 24U));
 }
 
-static void HTMDecodeMeasure(HTMMotorInstance *motor, const uint8_t *data, uint8_t len)
+static void HTMDecodeMeasure(HTMMotorInstance* motor, const uint8_t* data, uint8_t len)
 {
     float direction = motor->motor_reverse_flag == MOTOR_DIRECTION_REVERSE ? -1.0f : 1.0f;
 
@@ -80,13 +80,13 @@ static void HTMDecodeMeasure(HTMMotorInstance *motor, const uint8_t *data, uint8
     motor->measure.total_count = HTMReadI32(&data[2]);
     motor->measure.speed_0_1rpm = HTMReadI16(&data[6]);
     motor->measure.single_round_angle_deg = direction * (float)motor->measure.single_round_count *
-                                            360.0f / HTM_ENCODER_COUNTS_PER_ROUND;
+        360.0f / HTM_ENCODER_COUNTS_PER_ROUND;
     motor->measure.total_angle_deg = direction * (float)motor->measure.total_count *
-                                     360.0f / HTM_ENCODER_COUNTS_PER_ROUND;
+        360.0f / HTM_ENCODER_COUNTS_PER_ROUND;
     motor->measure.speed_rpm = direction * (float)motor->measure.speed_0_1rpm * 0.1f;
 }
 
-static void HTMDecodeStatus(HTMMotorInstance *motor, const uint8_t *data, uint8_t len)
+static void HTMDecodeStatus(HTMMotorInstance* motor, const uint8_t* data, uint8_t len)
 {
     if (len != 5U)
         return;
@@ -107,9 +107,9 @@ static void HTMDecodeStatus(HTMMotorInstance *motor, const uint8_t *data, uint8_
  * @param frame 完整回复帧首地址
  * @param frame_len 完整帧长度，包含帧头、数据和 CRC
  */
-static void HTMHandleFrame(HTMRS485Bus *bus, const uint8_t *frame, uint16_t frame_len)
+static void HTMHandleFrame(HTMRS485Bus* bus, const uint8_t* frame, uint16_t frame_len)
 {
-    HTMMotorInstance *motor;
+    HTMMotorInstance* motor;
     uint8_t command;
     uint8_t data_len;
 
@@ -142,7 +142,7 @@ static void HTMHandleFrame(HTMRS485Bus *bus, const uint8_t *frame, uint16_t fram
     }
 }
 
-static void HTMParseStream(HTMRS485Bus *bus)
+static void HTMParseStream(HTMRS485Bus* bus)
 {
     while (bus->rx_stream_len >= 7U)
     {
@@ -177,7 +177,7 @@ static void HTMParseStream(HTMRS485Bus *bus)
 
 static void HTMBusReceive(uint8_t bus_index)
 {
-    HTMRS485Bus *bus;
+    HTMRS485Bus* bus;
     uint16_t copy_len;
 
     if (bus_index >= htm_bus_count)
@@ -201,10 +201,10 @@ static void HTMBusReceive(uint8_t bus_index)
 static void HTMBus0Receive(void) { HTMBusReceive(0U); }
 static void HTMBus1Receive(void) { HTMBusReceive(1U); }
 
-static HAL_StatusTypeDef HTMSendRequest(HTMRS485Bus *bus,
-                                        HTMMotorInstance *motor,
+static HAL_StatusTypeDef HTMSendRequest(HTMRS485Bus* bus,
+                                        HTMMotorInstance* motor,
                                         uint8_t command,
-                                        const uint8_t *data,
+                                        const uint8_t* data,
                                         uint8_t data_len)
 {
     uint8_t frame[HTM_MAX_FRAME_LEN];
@@ -238,15 +238,15 @@ static HAL_StatusTypeDef HTMSendRequest(HTMRS485Bus *bus,
     return status;
 }
 
-HTMRS485Bus *HTMRS485BusInit(const HTMRS485Bus_Init_Config_s *config)
+HTMRS485Bus* HTMRS485BusInit(const HTMRS485Bus_Init_Config_s* config)
 {
-    HTMRS485Bus *bus;
+    HTMRS485Bus* bus;
     USART_Init_Config_s usart_config;
 
     if (config == NULL || config->usart_handle == NULL || htm_bus_count >= HTM_RS485_BUS_CNT ||
         (config->transfer_mode != USART_TRANSFER_BLOCKING &&
-         config->transfer_mode != USART_TRANSFER_IT &&
-         config->transfer_mode != USART_TRANSFER_DMA))
+            config->transfer_mode != USART_TRANSFER_IT &&
+            config->transfer_mode != USART_TRANSFER_DMA))
         return NULL;
 
     bus = &htm_bus_pool[htm_bus_count];
@@ -266,7 +266,7 @@ HTMRS485Bus *HTMRS485BusInit(const HTMRS485Bus_Init_Config_s *config)
     return bus;
 }
 
-HAL_StatusTypeDef HTMRS485RegisterMotor(HTMRS485Bus *bus, HTMMotorInstance *motor)
+HAL_StatusTypeDef HTMRS485RegisterMotor(HTMRS485Bus* bus, HTMMotorInstance* motor)
 {
     if (bus == NULL || motor == NULL || bus->motor_count >= HTM_RS485_MOTOR_PER_BUS)
         return HAL_ERROR;
@@ -281,8 +281,8 @@ void HTMRS485Control(void)
 {
     for (uint8_t bus_index = 0U; bus_index < htm_bus_count; ++bus_index)
     {
-        HTMRS485Bus *bus = &htm_bus_pool[bus_index];
-        HTMMotorInstance *motor;
+        HTMRS485Bus* bus = &htm_bus_pool[bus_index];
+        HTMMotorInstance* motor;
 
         if (bus->motor_count == 0U)
             continue;

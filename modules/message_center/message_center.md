@@ -1,7 +1,8 @@
 # message_center
 
 `message_center` 是 APP 层之间交换固定长度结构体消息的轻量发布-订阅模块。它的目标是让
-`robot_cmd`、`gimbal`、`chassis`、`shoot` 等应用保持平行关系：应用之间不互相包含头文件，也不直接调用彼此函数，而是通过约定好的 topic 传递命令和反馈。
+`robot_cmd`、`gimbal`、`chassis`、`shoot` 等应用保持平行关系：应用之间不互相包含头文件，也不直接调用彼此函数，而是通过约定好的
+topic 传递命令和反馈。
 
 当前版本已经重构为：
 
@@ -36,7 +37,8 @@
 
 **topic ID**
 
-topic 在代码中是 `MessageCenterTopic_e` 枚举值，例如 `MESSAGE_TOPIC_GIMBAL_CMD`。枚举 ID 在编译期固定，注册时不再比较字符串，也不会在每个 topic 节点里保存名称。
+topic 在代码中是 `MessageCenterTopic_e` 枚举值，例如 `MESSAGE_TOPIC_GIMBAL_CMD`。枚举 ID 在编译期固定，注册时不再比较字符串，也不会在每个
+topic 节点里保存名称。
 
 模块内部仍保留一张 `const` 调试名表，例如 `"gimbal_cmd"`。这张表只用于日志和调试查看，不参与发布/读取热路径。
 
@@ -44,11 +46,13 @@ topic 在代码中是 `MessageCenterTopic_e` 枚举值，例如 `MESSAGE_TOPIC_G
 
 **publisher**
 
-publisher 是发布者句柄。APP 初始化时调用 `MessageCenterRegisterPublisher()` 注册，运行期调用 `MessageCenterPublish()` 发布消息。
+publisher 是发布者句柄。APP 初始化时调用 `MessageCenterRegisterPublisher()` 注册，运行期调用 `MessageCenterPublish()`
+发布消息。
 
 **subscriber**
 
-subscriber 是订阅者句柄。APP 初始化时调用 `MessageCenterRegisterSubscriber()` 注册。每个 subscriber 拥有独立 FreeRTOS Queue，因此多个订阅者订阅同一个 topic 时，彼此不会抢消息。
+subscriber 是订阅者句柄。APP 初始化时调用 `MessageCenterRegisterSubscriber()` 注册。每个 subscriber 拥有独立 FreeRTOS
+Queue，因此多个订阅者订阅同一个 topic 时，彼此不会抢消息。
 
 ## 初始化流程
 
@@ -73,7 +77,8 @@ void RobotInit(void)
 }
 ```
 
-`MessageCenterInit()` 清空内部静态池。工程必须在任何发布者/订阅者注册之前显式调用它；如果忘记调用，注册接口会拒绝注册并返回 `NULL`。
+`MessageCenterInit()` 清空内部静态池。工程必须在任何发布者/订阅者注册之前显式调用它；如果忘记调用，注册接口会拒绝注册并返回
+`NULL`。
 
 各 APP 的 `Init()` 函数中注册发布者和订阅者。
 
@@ -118,7 +123,8 @@ typedef enum
 
 当前控制类消息推荐使用深度 1。深度 1 表示“最新帧邮箱”：如果发布者连续发布多次而订阅者还没读取，订阅者最终只保留最新一帧。
 
-为了保持 1kHz 控制路径足够轻，深度 1 的覆盖路径不会额外调用 `uxQueueMessagesWaiting()` 统计覆盖次数。`MessageCenterDroppedCount()` 主要用于深度大于 1 的 Queue 满丢弃统计。
+为了保持 1kHz 控制路径足够轻，深度 1 的覆盖路径不会额外调用 `uxQueueMessagesWaiting()` 统计覆盖次数。
+`MessageCenterDroppedCount()` 主要用于深度大于 1 的 Queue 满丢弃统计。
 
 ## 对外接口
 
@@ -320,16 +326,17 @@ void GimbalTask(void)
 
 ## 当前预留的 topic
 
-消息中心目前仍预留 cmd、gimbal、chassis、shoot 之间的命令和反馈 topic ID，但空 APP 尚未注册发布者、订阅者或消息数据结构。迁入业务时应根据实际数据流确认是否保留、重命名或新增这些 topic：
+消息中心目前仍预留 cmd、gimbal、chassis、shoot 之间的命令和反馈 topic ID，但空 APP
+尚未注册发布者、订阅者或消息数据结构。迁入业务时应根据实际数据流确认是否保留、重命名或新增这些 topic：
 
-| topic ID | 调试名 | 发布者 | 订阅者 | 消息类型 |
-| --- | --- | --- | --- | --- |
-| `MESSAGE_TOPIC_GIMBAL_CMD` | `gimbal_cmd` | `robot_cmd` | `gimbal` | `Gimbal_Ctrl_Cmd_s` |
-| `MESSAGE_TOPIC_GIMBAL_FEED` | `gimbal_feed` | `gimbal` | `robot_cmd` | `Gimbal_Upload_Data_s` |
-| `MESSAGE_TOPIC_SHOOT_CMD` | `shoot_cmd` | `robot_cmd` | `shoot` | `Shoot_Ctrl_Cmd_s` |
-| `MESSAGE_TOPIC_SHOOT_FEED` | `shoot_feed` | `shoot` | `robot_cmd` | `Shoot_Upload_Data_s` |
-| `MESSAGE_TOPIC_CHASSIS_CMD` | `chassis_cmd` | `robot_cmd` | `chassis` | `Chassis_Ctrl_Cmd_s` |
-| `MESSAGE_TOPIC_CHASSIS_FEED` | `chassis_feed` | `chassis` | `robot_cmd` | `Chassis_Upload_Data_s` |
+| topic ID                     | 调试名            | 发布者         | 订阅者         | 消息类型                    |
+|------------------------------|----------------|-------------|-------------|-------------------------|
+| `MESSAGE_TOPIC_GIMBAL_CMD`   | `gimbal_cmd`   | `robot_cmd` | `gimbal`    | `Gimbal_Ctrl_Cmd_s`     |
+| `MESSAGE_TOPIC_GIMBAL_FEED`  | `gimbal_feed`  | `gimbal`    | `robot_cmd` | `Gimbal_Upload_Data_s`  |
+| `MESSAGE_TOPIC_SHOOT_CMD`    | `shoot_cmd`    | `robot_cmd` | `shoot`     | `Shoot_Ctrl_Cmd_s`      |
+| `MESSAGE_TOPIC_SHOOT_FEED`   | `shoot_feed`   | `shoot`     | `robot_cmd` | `Shoot_Upload_Data_s`   |
+| `MESSAGE_TOPIC_CHASSIS_CMD`  | `chassis_cmd`  | `robot_cmd` | `chassis`   | `Chassis_Ctrl_Cmd_s`    |
+| `MESSAGE_TOPIC_CHASSIS_FEED` | `chassis_feed` | `chassis`   | `robot_cmd` | `Chassis_Upload_Data_s` |
 
 双板模式下，`robot_cmd` 和 `chassis` 之间的底盘命令/反馈会改用 `can_comm` 跨板传输。
 

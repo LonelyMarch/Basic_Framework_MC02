@@ -28,12 +28,14 @@
  */
 void BSPLogInit(void);
 
+
 /**
  * @brief 在任务上下文中输出队列中的日志
  *
  * @note 当前由BSPServiceTask在被事件唤醒或兜底超时唤醒后调用,一般不需要上层手动调用
  */
 void BSPLogProcess(void);
+
 
 /**
  * @brief 获取日志队列满导致的丢弃次数
@@ -42,12 +44,14 @@ void BSPLogProcess(void);
  */
 uint32_t BSPLogGetDroppedCount(void);
 
+
 /**
  * @brief 日志功能原型,供下面的LOGI,LOGW,LOGE等使用
  *
  * @return int 格式化后的日志长度,失败返回负数
  */
-int BSPLogPrintf(const char *type, const char *color, const char *format, ...);
+int BSPLogPrintf(const char* type, const char* color, const char* format, ...);
+
 
 #define LOG_PROTO(type, color, format, ...) BSPLogPrintf(type, color, format, ##__VA_ARGS__)
 
@@ -65,9 +69,9 @@ int BSPLogPrintf(const char *type, const char *color, const char *format, ...);
  *  @note Release配置默认定义DISABLE_LOG_SYSTEM后会关闭LOGINFO/LOGWARNING/LOGERROR。
  */
 #if defined(DISABLE_LOG_SYSTEM) && (DISABLE_LOG_SYSTEM)
-#define LOGINFO(format, ...) 
-#define LOGWARNING(format, ...) 
-#define LOGERROR(format, ...) 
+#define LOGINFO(format, ...)
+#define LOGWARNING(format, ...)
+#define LOGERROR(format, ...)
 #else
 // information level
 #define LOGINFO(format, ...) LOG_PROTO("I:", RTT_CTRL_TEXT_BRIGHT_GREEN, format, ##__VA_ARGS__)
@@ -85,6 +89,6 @@ int BSPLogPrintf(const char *type, const char *color, const char *format, ...);
  * @param ... 参数列表
  * @return int 打印的log字符数
  */
-int PrintLog(const char *fmt, ...);
+int PrintLog(const char* fmt, ...);
 
 #endif

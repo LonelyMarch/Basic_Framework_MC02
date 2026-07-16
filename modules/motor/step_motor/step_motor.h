@@ -190,12 +190,14 @@ void StepMotorEnable(StepMotorInstance* motor);
  */
 void StepMotorUpdate(StepMotorInstance* motor, float dt_s);
 
+
 /**
  * @brief 更新所有已注册步进电机的一次控制周期。
  *
  * @param dt_s 距离上次调用的时间（秒）。
  */
 void StepMotorControl(float dt_s);
+
 
 /**
  * @brief 获取已注册步进电机数量。

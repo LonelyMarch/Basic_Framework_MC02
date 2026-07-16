@@ -40,17 +40,19 @@ extern "C" {
  */
 typedef struct MASTER_PROTOCOL_PACKED
 {
-    uint32_t sec;   /**< 客户端秒级时间戳。 */
-    uint16_t ms;    /**< 毫秒部分，合法范围为0~999。 */
-    uint32_t id;    /**< Command类型内独立递增的帧编号。 */
-    uint8_t w;      /**< W键状态，只允许0或1。 */
-    uint8_t a;      /**< A键状态，只允许0或1。 */
-    uint8_t s;      /**< S键状态，只允许0或1。 */
-    uint8_t d;      /**< D键状态，只允许0或1。 */
-    float dx;       /**< 本帧鼠标X方向位移增量。 */
-    float dy;       /**< 本帧鼠标Y方向位移增量。 */
-    int8_t rotate;  /**< -1逆时针、0停止、1顺时针。 */
-} MasterCommandPayload;
+    uint32_t sec; /**< 客户端秒级时间戳。 */
+    uint16_t ms; /**< 毫秒部分，合法范围为0~999。 */
+    uint32_t id; /**< Command类型内独立递增的帧编号。 */
+    uint8_t w; /**< W键状态，只允许0或1。 */
+    uint8_t a; /**< A键状态，只允许0或1。 */
+    uint8_t s; /**< S键状态，只允许0或1。 */
+    uint8_t d; /**< D键状态，只允许0或1。 */
+    float dx; /**< 本帧鼠标X方向位移增量。 */
+    float dy; /**< 本帧鼠标Y方向位移增量。 */
+    int8_t rotate; /**< -1逆时针、0停止、1顺时针。 */
+}
+
+MasterCommandPayload;
 
 /**
  * @brief 视觉识别结果payload。
@@ -59,28 +61,32 @@ typedef struct MASTER_PROTOCOL_PACKED
  */
 typedef struct MASTER_PROTOCOL_PACKED
 {
-    uint32_t sec;          /**< 视觉端秒级时间戳。 */
-    uint16_t ms;           /**< 毫秒部分，合法范围为0~999。 */
-    uint32_t id;           /**< Vision类型内独立递增的帧编号。 */
-    int8_t result;         /**< -1表示无结果，0~8表示对应九宫格结果。 */
-    uint8_t order[9];      /**< 字符编号0~8，未知字符使用255。 */
-    int8_t goal[9];        /**< 各格目标状态，当前协议允许-1、0、1。 */
-    float coords[9][2];    /**< 九个目标的二维坐标。 */
-    float rvec[3];         /**< 外参旋转向量。 */
-    float tvec[3];         /**< 外参平移向量。 */
-} MasterVisionPayload;
+    uint32_t sec; /**< 视觉端秒级时间戳。 */
+    uint16_t ms; /**< 毫秒部分，合法范围为0~999。 */
+    uint32_t id; /**< Vision类型内独立递增的帧编号。 */
+    int8_t result; /**< -1表示无结果，0~8表示对应九宫格结果。 */
+    uint8_t order[9]; /**< 字符编号0~8，未知字符使用255。 */
+    int8_t goal[9]; /**< 各格目标状态，当前协议允许-1、0、1。 */
+    float coords[9][2]; /**< 九个目标的二维坐标。 */
+    float rvec[3]; /**< 外参旋转向量。 */
+    float tvec[3]; /**< 外参平移向量。 */
+}
+
+MasterVisionPayload;
 
 /**
  * @brief 离散事件payload。
  */
 typedef struct MASTER_PROTOCOL_PACKED
 {
-    uint32_t sec;   /**< 事件源秒级时间戳。 */
-    uint16_t ms;    /**< 毫秒部分，合法范围为0~999。 */
-    uint32_t id;    /**< Event类型内独立递增的帧编号。 */
-    uint8_t event;  /**< 事件编号，当前为1~3。 */
-    float value;    /**< 可选事件参数，未使用时为0.0f。 */
-} MasterEventPayload;
+    uint32_t sec; /**< 事件源秒级时间戳。 */
+    uint16_t ms; /**< 毫秒部分，合法范围为0~999。 */
+    uint32_t id; /**< Event类型内独立递增的帧编号。 */
+    uint8_t event; /**< 事件编号，当前为1~3。 */
+    float value; /**< 可选事件参数，未使用时为0.0f。 */
+}
+
+MasterEventPayload;
 
 #define MASTER_PROTOCOL_COMMAND_PAYLOAD_SIZE ((uint16_t)sizeof(MasterCommandPayload))
 #define MASTER_PROTOCOL_VISION_PAYLOAD_SIZE  ((uint16_t)sizeof(MasterVisionPayload))
@@ -104,6 +110,7 @@ typedef enum
  */
 uint16_t MasterProtocolGetPayloadSize(uint8_t type);
 
+
 /**
  * @brief 计算协议规定的低8位累加校验和。
  *
@@ -114,7 +121,8 @@ uint16_t MasterProtocolGetPayloadSize(uint8_t type);
  */
 uint8_t MasterProtocolCalculateChecksum(uint8_t type,
                                         uint16_t payload_length,
-                                        const uint8_t *payload);
+                                        const uint8_t* payload);
+
 
 /**
  * @brief 校验payload的类型、长度和字段取值。
@@ -125,7 +133,7 @@ uint8_t MasterProtocolCalculateChecksum(uint8_t type,
  * @return MasterProtocolPayloadStatus_e 校验结果。
  */
 MasterProtocolPayloadStatus_e MasterProtocolValidatePayload(uint8_t type,
-                                                            const uint8_t *payload,
+                                                            const uint8_t* payload,
                                                             uint16_t payload_length);
 
 #ifdef __cplusplus

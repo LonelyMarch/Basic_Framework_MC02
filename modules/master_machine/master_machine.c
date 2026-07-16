@@ -35,7 +35,7 @@ typedef struct
     uint32_t last_id;
 } MasterMachineIdTracker_s;
 
-static USARTInstance *master_machine_usart;
+static USARTInstance* master_machine_usart;
 static MasterMachine_Init_Config_s master_machine_config;
 static MasterMachineCommandChannel_s master_machine_command_channel;
 static MasterMachineVisionChannel_s master_machine_vision_channel;
@@ -57,7 +57,7 @@ static volatile uint8_t master_machine_initialized;
  *
  * @param primask 输出进入临界区前的中断屏蔽状态。
  */
-static void MasterMachineEnterCritical(uint32_t *primask)
+static void MasterMachineEnterCritical(uint32_t* primask)
 {
     if (primask == NULL)
     {
@@ -113,7 +113,7 @@ static uint8_t MasterMachineTypeToIndex(uint8_t type)
  * @param type 协议帧类型。
  * @return MasterMachineTypeStatistics_s* 合法类型对应的统计对象，非法类型返回NULL。
  */
-static MasterMachineTypeStatistics_s *MasterMachineGetTypeStatistics(uint8_t type)
+static MasterMachineTypeStatistics_s* MasterMachineGetTypeStatistics(uint8_t type)
 {
     switch (type)
     {
@@ -143,8 +143,8 @@ static uint8_t MasterMachineAcceptFrameId(uint8_t type, uint32_t id)
 {
     uint8_t index;
     uint32_t forward_distance;
-    MasterMachineIdTracker_s *tracker;
-    MasterMachineTypeStatistics_s *statistics;
+    MasterMachineIdTracker_s* tracker;
+    MasterMachineTypeStatistics_s* statistics;
 
     index = MasterMachineTypeToIndex(type);
     statistics = MasterMachineGetTypeStatistics(type);
@@ -189,7 +189,7 @@ static uint8_t MasterMachineAcceptFrameId(uint8_t type, uint32_t id)
  *
  * @param command 已完成协议校验和ID检查的Command。
  */
-static void MasterMachinePublishCommand(const MasterCommandPayload *command)
+static void MasterMachinePublishCommand(const MasterCommandPayload* command)
 {
     uint8_t inactive_index;
     uint32_t primask;
@@ -216,7 +216,7 @@ static void MasterMachinePublishCommand(const MasterCommandPayload *command)
  *
  * @param vision 已完成协议校验和ID检查的Vision。
  */
-static void MasterMachinePublishVision(const MasterVisionPayload *vision)
+static void MasterMachinePublishVision(const MasterVisionPayload* vision)
 {
     uint8_t inactive_index;
     uint32_t primask;
@@ -243,7 +243,7 @@ static void MasterMachinePublishVision(const MasterVisionPayload *vision)
  *
  * @param event_payload 已完成协议校验和ID检查的Event。
  */
-static void MasterMachinePublishEvent(const MasterEventPayload *event_payload)
+static void MasterMachinePublishEvent(const MasterEventPayload* event_payload)
 {
     uint32_t primask;
 
@@ -279,7 +279,7 @@ static void MasterMachinePublishEvent(const MasterEventPayload *event_payload)
  * @param payload 已通过语义校验的payload。
  * @return uint8_t 允许发布返回1，重复或乱序返回0。
  */
-static uint8_t MasterMachinePayloadIdIsAccepted(uint8_t type, const uint8_t *payload)
+static uint8_t MasterMachinePayloadIdIsAccepted(uint8_t type, const uint8_t* payload)
 {
     uint32_t id;
 
@@ -294,7 +294,7 @@ static uint8_t MasterMachinePayloadIdIsAccepted(uint8_t type, const uint8_t *pay
  * @param type 协议帧类型。
  * @param payload payload原始字节。
  */
-static void MasterMachineDispatchFrame(uint8_t type, const uint8_t *payload)
+static void MasterMachineDispatchFrame(uint8_t type, const uint8_t* payload)
 {
     MasterCommandPayload command;
     MasterVisionPayload vision;
@@ -352,7 +352,7 @@ static void MasterMachineParseStream(void)
     uint8_t type;
     uint8_t received_checksum;
     uint8_t calculated_checksum;
-    const uint8_t *payload;
+    const uint8_t* payload;
     MasterProtocolPayloadStatus_e payload_status;
 
     cursor = 0U;
@@ -385,7 +385,7 @@ static void MasterMachineParseStream(void)
         }
 
         payload_length = (uint16_t)master_machine_stream_buffer[cursor + 3U] |
-                         ((uint16_t)master_machine_stream_buffer[cursor + 4U] << 8U);
+            ((uint16_t)master_machine_stream_buffer[cursor + 4U] << 8U);
         if (payload_length != expected_length || payload_length > MASTER_PROTOCOL_MAX_PAYLOAD_SIZE)
         {
             master_machine_statistics.length_error_count++;
@@ -444,7 +444,7 @@ static void MasterMachineParseStream(void)
  * @param data 接收片段首地址。
  * @param length 接收片段长度。
  */
-static void MasterMachineAppendStream(const uint8_t *data, uint16_t length)
+static void MasterMachineAppendStream(const uint8_t* data, uint16_t length)
 {
     uint16_t overflow_length;
 
@@ -464,7 +464,7 @@ static void MasterMachineAppendStream(const uint8_t *data, uint16_t length)
     if ((uint32_t)master_machine_stream_length + length > MASTER_MACHINE_STREAM_BUFFER_SIZE)
     {
         overflow_length = (uint16_t)((uint32_t)master_machine_stream_length + length -
-                                     MASTER_MACHINE_STREAM_BUFFER_SIZE);
+            MASTER_MACHINE_STREAM_BUFFER_SIZE);
         if (overflow_length >= master_machine_stream_length)
         {
             master_machine_statistics.discarded_noise_byte_count += master_machine_stream_length;
@@ -506,7 +506,7 @@ static void MasterMachineReceiveCallback(void)
 /**
  * @brief 初始化ESP32-S3上位机通信模块。
  */
-uint8_t MasterMachineInit(const MasterMachine_Init_Config_s *config)
+uint8_t MasterMachineInit(const MasterMachine_Init_Config_s* config)
 {
     USART_Init_Config_s usart_config;
 
@@ -653,7 +653,7 @@ uint8_t MasterMachineIsVisionFresh(void)
 /**
  * @brief 按消费者游标读取一份新的Command快照。
  */
-uint8_t MasterMachineReadCommand(MasterCommandPayload *command, MasterMachineCursor_s *cursor)
+uint8_t MasterMachineReadCommand(MasterCommandPayload* command, MasterMachineCursor_s* cursor)
 {
     uint32_t primask;
     uint32_t generation;
@@ -682,7 +682,7 @@ uint8_t MasterMachineReadCommand(MasterCommandPayload *command, MasterMachineCur
 /**
  * @brief 无条件读取当前最新Command快照。
  */
-uint8_t MasterMachinePeekCommand(MasterCommandPayload *command)
+uint8_t MasterMachinePeekCommand(MasterCommandPayload* command)
 {
     uint32_t primask;
 
@@ -708,7 +708,7 @@ uint8_t MasterMachinePeekCommand(MasterCommandPayload *command)
 /**
  * @brief 按消费者游标读取一份新的Vision快照。
  */
-uint8_t MasterMachineReadVision(MasterVisionPayload *vision, MasterMachineCursor_s *cursor)
+uint8_t MasterMachineReadVision(MasterVisionPayload* vision, MasterMachineCursor_s* cursor)
 {
     uint32_t primask;
     uint32_t generation;
@@ -737,7 +737,7 @@ uint8_t MasterMachineReadVision(MasterVisionPayload *vision, MasterMachineCursor
 /**
  * @brief 无条件读取当前最新Vision快照。
  */
-uint8_t MasterMachinePeekVision(MasterVisionPayload *vision)
+uint8_t MasterMachinePeekVision(MasterVisionPayload* vision)
 {
     uint32_t primask;
 
@@ -763,7 +763,7 @@ uint8_t MasterMachinePeekVision(MasterVisionPayload *vision)
 /**
  * @brief 从离散事件FIFO中取出最早尚未处理的事件。
  */
-uint8_t MasterMachinePopEvent(MasterEventPayload *event_payload)
+uint8_t MasterMachinePopEvent(MasterEventPayload* event_payload)
 {
     uint32_t primask;
 
@@ -824,7 +824,7 @@ void MasterMachineClearEmergencyStop(void)
 /**
  * @brief 获取运行统计的线程安全快照。
  */
-uint8_t MasterMachineGetStatistics(MasterMachineStatistics_s *statistics)
+uint8_t MasterMachineGetStatistics(MasterMachineStatistics_s* statistics)
 {
     uint32_t primask;
 

@@ -40,7 +40,8 @@ uint32_t BSP_Flash_GetUserSize(void);
 uint32_t BSP_Flash_GetLastError(void);
 ```
 
-`BSP_Flash_Erase()` 的 `offset` 和 `size` 必须按 Flash sector 对齐。`BSP_Flash_Write()` 的 `offset` 必须按 Flash program unit 对齐,写入前目标区域必须已经擦除。
+`BSP_Flash_Erase()` 的 `offset` 和 `size` 必须按 Flash sector 对齐。`BSP_Flash_Write()` 的 `offset` 必须按 Flash program
+unit 对齐,写入前目标区域必须已经擦除。
 
 ## 异步接口
 

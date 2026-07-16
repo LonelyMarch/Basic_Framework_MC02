@@ -2,7 +2,8 @@
 
 ## 适用范围
 
-本驱动对应 `doc/HT/RS485通信协议_V2.x.pdf`，适用于使用 `0x3E/0x3C + 设备地址 + 命令码 + CRC16_MODBUS` 协议的 HTM35xx/HTM43xx。
+本驱动对应 `doc/HT/RS485通信协议_V2.x.pdf`，适用于使用 `0x3E/0x3C + 设备地址 + 命令码 + CRC16_MODBUS` 协议的
+HTM35xx/HTM43xx。
 
 它与HT04的MIT/Cheetah协议完全独立。当前新增实现使用RS485；HTM系列的CAN命令码协议可在后续作为另一种传输实现加入，但不应与HT04共用报文解析。
 
@@ -73,10 +74,10 @@ HTMMotorInstance *motor = HTMMotorInit(&motor_config);
 
 支持的固定模式及对应协议命令：
 
-| 注册模式 | 控制接口 | 命令码 |
-|---|---|---:|
-| `HTM_CONTROL_OPEN_LOOP` | `HTMMotorSetOpenLoop()` | `0x53` |
-| `HTM_CONTROL_SPEED` | `HTMMotorSetSpeed()` | `0x54` |
+| 注册模式                            | 控制接口                            |    命令码 |
+|---------------------------------|---------------------------------|-------:|
+| `HTM_CONTROL_OPEN_LOOP`         | `HTMMotorSetOpenLoop()`         | `0x53` |
+| `HTM_CONTROL_SPEED`             | `HTMMotorSetSpeed()`            | `0x54` |
 | `HTM_CONTROL_ABSOLUTE_POSITION` | `HTMMotorSetAbsolutePosition()` | `0x55` |
 | `HTM_CONTROL_RELATIVE_POSITION` | `HTMMotorSetRelativePosition()` | `0x56` |
 
@@ -111,7 +112,8 @@ HAL_StatusTypeDef HTMMotorClearFault(HTMMotorInstance *motor);
 - 每个实例只保存一个待发命令；已有命令尚未提交时，普通新命令返回 `HAL_BUSY`。
 - 设置当前位置为原点后，协议规定电机会进入关闭状态，因此模块同时清除软件使能。
 
-绝对位置命令的协议数据类型是 `uint32_t`。当前接口只接受非负角度，并且绝对位置模式不支持通过 `motor_reverse_flag`生成负物理目标；需要反向绝对坐标时应在上层建立明确的零点和正方向映射。
+绝对位置命令的协议数据类型是 `uint32_t`。当前接口只接受非负角度，并且绝对位置模式不支持通过 `motor_reverse_flag`
+生成负物理目标；需要反向绝对坐标时应在上层建立明确的零点和正方向映射。
 
 ## 反馈数据
 

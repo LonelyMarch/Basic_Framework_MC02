@@ -305,8 +305,8 @@ static uint8_t LKMotorSafetyCommandPending(LKMotorInstance* motor)
 
     primask = LKEnterCritical();
     pending = motor->active_command_valid != 0U &&
-        (motor->active_command[0] == (uint8_t)LK_CMD_MOTOR_STOP ||
-         motor->active_command[0] == (uint8_t)LK_CMD_MOTOR_OFF);
+    (motor->active_command[0] == (uint8_t)LK_CMD_MOTOR_STOP ||
+        motor->active_command[0] == (uint8_t)LK_CMD_MOTOR_OFF);
     LKExitCritical(primask);
     return pending;
 }

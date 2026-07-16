@@ -26,9 +26,9 @@ typedef enum
 
 struct DDTMotorBus
 {
-    USARTInstance *usart;
-    DDTMotorInstance *motors[DDT_MOTOR_COUNT_PER_BUS];
-    DDTMotorInstance *waiting_motor;
+    USARTInstance* usart;
+    DDTMotorInstance* motors[DDT_MOTOR_COUNT_PER_BUS];
+    DDTMotorInstance* waiting_motor;
     DDTMotorRawFeedback_t raw_feedback;
     USART_TRANSFER_MODE transfer_mode;
     uint8_t motor_count;
@@ -62,7 +62,7 @@ static uint8_t ddt_motor_count;
  * @param length 数据长度
  * @return uint8_t CRC-8/MAXIM 校验值
  */
-static uint8_t DDTCRC8Maxim(const uint8_t *data, uint16_t length)
+static uint8_t DDTCRC8Maxim(const uint8_t* data, uint16_t length)
 {
     uint8_t crc = 0U;
 
@@ -88,13 +88,13 @@ static uint8_t DDTCRC8Maxim(const uint8_t *data, uint16_t length)
  * @param device_id 设备 ID
  * @return DDTMotorInstance* 找到返回实例，否则返回 NULL
  */
-static DDTMotorInstance *DDTFindMotor(DDTMotorBus *bus, uint8_t device_id)
+static DDTMotorInstance* DDTFindMotor(DDTMotorBus* bus, uint8_t device_id)
 {
     if (bus == NULL) return NULL;
 
     for (uint8_t index = 0U; index < bus->motor_count; index++)
     {
-        DDTMotorInstance *motor = bus->motors[index];
+        DDTMotorInstance* motor = bus->motors[index];
         if (motor != NULL && motor->device_id == device_id) return motor;
     }
 
@@ -109,8 +109,8 @@ static DDTMotorInstance *DDTFindMotor(DDTMotorBus *bus, uint8_t device_id)
  * @param data 回复数据首地址
  * @param length 回复长度
  */
-static void DDTStoreRawFeedback(DDTMotorRawFeedback_t *feedback,
-                                const uint8_t *data,
+static void DDTStoreRawFeedback(DDTMotorRawFeedback_t* feedback,
+                                const uint8_t* data,
                                 uint16_t length)
 {
     uint16_t copy_length;
@@ -129,8 +129,8 @@ static void DDTStoreRawFeedback(DDTMotorRawFeedback_t *feedback,
     feedback->length = copy_length;
     feedback->receive_count++;
     feedback->crc_valid = (length == DDT_MOTOR_FRAME_LENGTH &&
-                           DDTCRC8Maxim(data, DDT_MOTOR_FRAME_LENGTH - 1U) ==
-                           data[DDT_MOTOR_FRAME_LENGTH - 1U]);
+        DDTCRC8Maxim(data, DDT_MOTOR_FRAME_LENGTH - 1U) ==
+        data[DDT_MOTOR_FRAME_LENGTH - 1U]);
 }
 
 
@@ -145,7 +145,7 @@ static void DDTStoreRawFeedback(DDTMotorRawFeedback_t *feedback,
  * @param frame 10 字节反馈帧
  * @param feedback_type 本帧对应的请求类型
  */
-static void DDTParseMotorFeedback(DDTMotorInstance *motor,
+static void DDTParseMotorFeedback(DDTMotorInstance* motor,
                                   const uint8_t frame[DDT_MOTOR_FRAME_LENGTH],
                                   DDTMotorFeedbackType_e feedback_type)
 {
@@ -205,8 +205,8 @@ static void DDTParseMotorFeedback(DDTMotorInstance *motor,
  */
 static void DDTBusReceive(uint8_t bus_index)
 {
-    DDTMotorBus *bus;
-    const uint8_t *data;
+    DDTMotorBus* bus;
+    const uint8_t* data;
     uint16_t length;
 
     if (bus_index >= ddt_bus_count) return;
@@ -224,7 +224,7 @@ static void DDTBusReceive(uint8_t bus_index)
 
     if (bus->waiting_motor != NULL)
     {
-        DDTMotorInstance *motor = bus->waiting_motor;
+        DDTMotorInstance* motor = bus->waiting_motor;
         DDTWaitingResponseType_e response_type = bus->waiting_response_type;
 
         DDTStoreRawFeedback(&motor->raw_feedback, data, length);
@@ -251,7 +251,7 @@ static void DDTBusReceive(uint8_t bus_index)
     {
         for (uint16_t offset = 0U; offset < length; offset += DDT_MOTOR_FRAME_LENGTH)
         {
-            DDTMotorInstance *motor = DDTFindMotor(bus, data[offset]);
+            DDTMotorInstance* motor = DDTFindMotor(bus, data[offset]);
             if (motor == NULL) continue;
 
             DDTStoreRawFeedback(&motor->raw_feedback, &data[offset], DDT_MOTOR_FRAME_LENGTH);
@@ -279,7 +279,7 @@ static void DDTBus1Receive(void)
  * @param motor 电机实例
  * @param frame 输出的 10 字节帧
  */
-static void DDTBuildDriveFrame(const DDTMotorInstance *motor,
+static void DDTBuildDriveFrame(const DDTMotorInstance* motor,
                                uint8_t frame[DDT_MOTOR_FRAME_LENGTH])
 {
     uint16_t raw = (uint16_t)motor->target_raw;
@@ -301,7 +301,7 @@ static void DDTBuildDriveFrame(const DDTMotorInstance *motor,
  * @param motor 电机实例
  * @param frame 输出的 10 字节帧
  */
-static void DDTBuildStatusQueryFrame(const DDTMotorInstance *motor,
+static void DDTBuildStatusQueryFrame(const DDTMotorInstance* motor,
                                      uint8_t frame[DDT_MOTOR_FRAME_LENGTH])
 {
     memset(frame, 0, DDT_MOTOR_FRAME_LENGTH);
@@ -318,7 +318,7 @@ static void DDTBuildStatusQueryFrame(const DDTMotorInstance *motor,
  * @param frame 10 字节发送帧
  * @return HAL_StatusTypeDef BSP USART 发送结果
  */
-static HAL_StatusTypeDef DDTSendFrame(DDTMotorBus *bus,
+static HAL_StatusTypeDef DDTSendFrame(DDTMotorBus* bus,
                                       uint8_t frame[DDT_MOTOR_FRAME_LENGTH])
 {
     HAL_StatusTypeDef status;
@@ -330,15 +330,15 @@ static HAL_StatusTypeDef DDTSendFrame(DDTMotorBus *bus,
 }
 
 
-DDTMotorBus *DDTMotorBusInit(const DDTMotorBusInitConfig_t *config)
+DDTMotorBus* DDTMotorBusInit(const DDTMotorBusInitConfig_t* config)
 {
-    DDTMotorBus *bus;
+    DDTMotorBus* bus;
     USART_Init_Config_s usart_config;
 
     if (config == NULL || config->usart_handle == NULL || ddt_bus_count >= DDT_MOTOR_BUS_COUNT ||
         (config->transfer_mode != USART_TRANSFER_BLOCKING &&
-         config->transfer_mode != USART_TRANSFER_IT &&
-         config->transfer_mode != USART_TRANSFER_DMA))
+            config->transfer_mode != USART_TRANSFER_IT &&
+            config->transfer_mode != USART_TRANSFER_DMA))
     {
         LOGERROR("[ddt_motor] invalid RS485 bus config");
         return NULL;
@@ -366,16 +366,16 @@ DDTMotorBus *DDTMotorBusInit(const DDTMotorBusInitConfig_t *config)
 }
 
 
-DDTMotorInstance *DDTMotorInit(const DDTMotorInitConfig_t *config)
+DDTMotorInstance* DDTMotorInit(const DDTMotorInitConfig_t* config)
 {
-    DDTMotorInstance *motor;
+    DDTMotorInstance* motor;
 
     if (config == NULL || config->bus == NULL || config->device_id == 0U ||
         config->control_mode < DDT_MOTOR_MODE_CURRENT ||
         config->control_mode > DDT_MOTOR_MODE_POSITION ||
         config->motor_reverse_flag > MOTOR_DIRECTION_REVERSE ||
         (config->control_mode == DDT_MOTOR_MODE_POSITION &&
-         config->motor_reverse_flag == MOTOR_DIRECTION_REVERSE) ||
+            config->motor_reverse_flag == MOTOR_DIRECTION_REVERSE) ||
         config->bus->motor_count >= DDT_MOTOR_COUNT_PER_BUS ||
         ddt_motor_count >= DDT_MOTOR_TOTAL_COUNT ||
         DDTFindMotor(config->bus, config->device_id) != NULL)
@@ -399,7 +399,7 @@ DDTMotorInstance *DDTMotorInit(const DDTMotorInitConfig_t *config)
 }
 
 
-HAL_StatusTypeDef DDTMotorEnable(DDTMotorInstance *motor)
+HAL_StatusTypeDef DDTMotorEnable(DDTMotorInstance* motor)
 {
     if (motor == NULL || motor->target_initialized == 0U) return HAL_ERROR;
     if (motor->measure.feedback_received != 0U && motor->measure.mode_mismatch != 0U)
@@ -410,7 +410,7 @@ HAL_StatusTypeDef DDTMotorEnable(DDTMotorInstance *motor)
 }
 
 
-HAL_StatusTypeDef DDTMotorStop(DDTMotorInstance *motor)
+HAL_StatusTypeDef DDTMotorStop(DDTMotorInstance* motor)
 {
     if (motor == NULL) return HAL_ERROR;
 
@@ -429,7 +429,7 @@ HAL_StatusTypeDef DDTMotorStop(DDTMotorInstance *motor)
 }
 
 
-HAL_StatusTypeDef DDTMotorSetCurrent(DDTMotorInstance *motor, float current_a)
+HAL_StatusTypeDef DDTMotorSetCurrent(DDTMotorInstance* motor, float current_a)
 {
     float directed_current;
 
@@ -447,7 +447,7 @@ HAL_StatusTypeDef DDTMotorSetCurrent(DDTMotorInstance *motor, float current_a)
 }
 
 
-HAL_StatusTypeDef DDTMotorSetSpeed(DDTMotorInstance *motor, float speed_rpm, uint8_t brake)
+HAL_StatusTypeDef DDTMotorSetSpeed(DDTMotorInstance* motor, float speed_rpm, uint8_t brake)
 {
     float directed_speed;
 
@@ -467,7 +467,7 @@ HAL_StatusTypeDef DDTMotorSetSpeed(DDTMotorInstance *motor, float speed_rpm, uin
 }
 
 
-HAL_StatusTypeDef DDTMotorSetPosition(DDTMotorInstance *motor, float position_deg)
+HAL_StatusTypeDef DDTMotorSetPosition(DDTMotorInstance* motor, float position_deg)
 {
     if (motor == NULL || motor->control_mode != DDT_MOTOR_MODE_POSITION || !isfinite(position_deg))
         return HAL_ERROR;
@@ -482,7 +482,7 @@ HAL_StatusTypeDef DDTMotorSetPosition(DDTMotorInstance *motor, float position_de
 }
 
 
-HAL_StatusTypeDef DDTMotorSetAccelerationTime(DDTMotorInstance *motor, uint8_t acceleration_time)
+HAL_StatusTypeDef DDTMotorSetAccelerationTime(DDTMotorInstance* motor, uint8_t acceleration_time)
 {
     if (motor == NULL) return HAL_ERROR;
     motor->acceleration_time = acceleration_time;
@@ -491,7 +491,7 @@ HAL_StatusTypeDef DDTMotorSetAccelerationTime(DDTMotorInstance *motor, uint8_t a
 }
 
 
-HAL_StatusTypeDef DDTMotorRequestStatus(DDTMotorInstance *motor)
+HAL_StatusTypeDef DDTMotorRequestStatus(DDTMotorInstance* motor)
 {
     if (motor == NULL) return HAL_ERROR;
     if (motor->status_query_pending != 0U || motor->bus->waiting_motor != NULL ||
@@ -505,19 +505,19 @@ HAL_StatusTypeDef DDTMotorRequestStatus(DDTMotorInstance *motor)
 }
 
 
-const DDTMotorRawFeedback_t *DDTMotorGetRawFeedback(const DDTMotorInstance *motor)
+const DDTMotorRawFeedback_t* DDTMotorGetRawFeedback(const DDTMotorInstance* motor)
 {
     return motor != NULL ? &motor->raw_feedback : NULL;
 }
 
 
-const DDTMotorMeasure_t *DDTMotorGetMeasure(const DDTMotorInstance *motor)
+const DDTMotorMeasure_t* DDTMotorGetMeasure(const DDTMotorInstance* motor)
 {
     return motor != NULL ? &motor->measure : NULL;
 }
 
 
-uint8_t DDTMotorIsOnline(const DDTMotorInstance *motor, float timeout_ms)
+uint8_t DDTMotorIsOnline(const DDTMotorInstance* motor, float timeout_ms)
 {
     if (motor == NULL || motor->measure.feedback_received == 0U ||
         !isfinite(timeout_ms) || timeout_ms <= 0.0f)
@@ -529,7 +529,7 @@ uint8_t DDTMotorIsOnline(const DDTMotorInstance *motor, float timeout_ms)
 }
 
 
-HAL_StatusTypeDef DDTMotorBusSetDeviceId(DDTMotorBus *bus, uint8_t new_id)
+HAL_StatusTypeDef DDTMotorBusSetDeviceId(DDTMotorBus* bus, uint8_t new_id)
 {
     if (bus == NULL || new_id == 0U || bus->motor_count != 0U ||
         bus->special_repeat_count != 0U || bus->waiting_bus_response != 0U)
@@ -548,7 +548,7 @@ HAL_StatusTypeDef DDTMotorBusSetDeviceId(DDTMotorBus *bus, uint8_t new_id)
 }
 
 
-HAL_StatusTypeDef DDTMotorBusRequestDeviceId(DDTMotorBus *bus)
+HAL_StatusTypeDef DDTMotorBusRequestDeviceId(DDTMotorBus* bus)
 {
     if (bus == NULL || bus->motor_count != 0U || bus->special_repeat_count != 0U ||
         bus->waiting_bus_response != 0U)
@@ -566,7 +566,7 @@ HAL_StatusTypeDef DDTMotorBusRequestDeviceId(DDTMotorBus *bus)
 }
 
 
-const DDTMotorRawFeedback_t *DDTMotorBusGetRawFeedback(const DDTMotorBus *bus)
+const DDTMotorRawFeedback_t* DDTMotorBusGetRawFeedback(const DDTMotorBus* bus)
 {
     return bus != NULL ? &bus->raw_feedback : NULL;
 }
@@ -580,8 +580,8 @@ const DDTMotorRawFeedback_t *DDTMotorBusGetRawFeedback(const DDTMotorBus *bus)
  * @param now_ms 当前时间戳
  * @return HAL_StatusTypeDef BSP USART 发送结果
  */
-static HAL_StatusTypeDef DDTSubmitMotorControl(DDTMotorBus *bus,
-                                               DDTMotorInstance *motor,
+static HAL_StatusTypeDef DDTSubmitMotorControl(DDTMotorBus* bus,
+                                               DDTMotorInstance* motor,
                                                float now_ms)
 {
     uint8_t frame[DDT_MOTOR_FRAME_LENGTH];
@@ -612,7 +612,7 @@ static HAL_StatusTypeDef DDTSubmitMotorControl(DDTMotorBus *bus,
  *
  * @param bus 总线实例
  */
-static void DDTControlBus(DDTMotorBus *bus)
+static void DDTControlBus(DDTMotorBus* bus)
 {
     uint8_t frame[DDT_MOTOR_FRAME_LENGTH];
     float now_ms;
@@ -653,7 +653,7 @@ static void DDTControlBus(DDTMotorBus *bus)
 
     for (uint8_t checked = 0U; checked < bus->motor_count; checked++)
     {
-        DDTMotorInstance *motor = bus->motors[bus->round_robin_index];
+        DDTMotorInstance* motor = bus->motors[bus->round_robin_index];
         HAL_StatusTypeDef status;
 
         bus->round_robin_index = (uint8_t)((bus->round_robin_index + 1U) % bus->motor_count);

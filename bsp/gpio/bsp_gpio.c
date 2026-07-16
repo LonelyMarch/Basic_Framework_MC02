@@ -7,11 +7,11 @@
 
 static uint8_t idx;
 static GPIOInstance gpio_instance_pool[GPIO_MX_DEVICE_NUM]; // GPIO实例静态池,控制结构体放默认.bss/DTCM
-static GPIOInstance *gpio_instance[GPIO_MX_DEVICE_NUM] = {NULL};
+static GPIOInstance* gpio_instance[GPIO_MX_DEVICE_NUM] = {NULL};
 
-static void GPIODispatchDeferredCallback(void *arg)
+static void GPIODispatchDeferredCallback(void* arg)
 {
-    GPIOInstance *gpio = (GPIOInstance *)arg;
+    GPIOInstance* gpio = (GPIOInstance*)arg;
 
     if (gpio != NULL && gpio->gpio_model_callback != NULL)
     {
@@ -19,11 +19,11 @@ static void GPIODispatchDeferredCallback(void *arg)
     }
 }
 
-static GPIOInstance *GPIOFindEXTIInstance(uint16_t GPIO_Pin)
+static GPIOInstance* GPIOFindEXTIInstance(uint16_t GPIO_Pin)
 {
     for (size_t i = 0; i < idx; i++)
     {
-        GPIOInstance *gpio = gpio_instance[i];
+        GPIOInstance* gpio = gpio_instance[i];
         if (gpio == NULL)
         {
             continue;
@@ -60,7 +60,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
         return;
     }
 
-    GPIOInstance *gpio;
+    GPIOInstance* gpio;
     for (size_t i = 0; i < idx; i++)
     {
         gpio = gpio_instance[i];
@@ -77,7 +77,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
 }
 
-GPIOInstance *GPIORegister(GPIO_Init_Config_s *GPIO_config)
+GPIOInstance* GPIORegister(GPIO_Init_Config_s* GPIO_config)
 {
     if (GPIO_config == NULL)
     {
@@ -135,7 +135,7 @@ GPIOInstance *GPIORegister(GPIO_Init_Config_s *GPIO_config)
         return NULL;
     }
 
-    GPIOInstance *ins = &gpio_instance_pool[idx];
+    GPIOInstance* ins = &gpio_instance_pool[idx];
     memset(ins, 0, sizeof(GPIOInstance));
 
     ins->GPIOx = GPIO_config->GPIOx;
@@ -155,22 +155,22 @@ GPIOInstance *GPIORegister(GPIO_Init_Config_s *GPIO_config)
 // ----------------- GPIO API -----------------
 // 以下接口是对HAL GPIO读写的薄封装,统一使用GPIOInstance作为上层访问入口。
 
-void GPIOToggle(GPIOInstance *_instance)
+void GPIOToggle(GPIOInstance* _instance)
 {
     HAL_GPIO_TogglePin(_instance->GPIOx, _instance->GPIO_Pin);
 }
 
-void GPIOSet(GPIOInstance *_instance)
+void GPIOSet(GPIOInstance* _instance)
 {
     HAL_GPIO_WritePin(_instance->GPIOx, _instance->GPIO_Pin, GPIO_PIN_SET);
 }
 
-void GPIOReset(GPIOInstance *_instance)
+void GPIOReset(GPIOInstance* _instance)
 {
     HAL_GPIO_WritePin(_instance->GPIOx, _instance->GPIO_Pin, GPIO_PIN_RESET);
 }
 
-GPIO_PinState GPIORead(GPIOInstance *_instance)
+GPIO_PinState GPIORead(GPIOInstance* _instance)
 {
     return HAL_GPIO_ReadPin(_instance->GPIOx, _instance->GPIO_Pin);
 }

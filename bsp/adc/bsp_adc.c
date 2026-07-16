@@ -21,7 +21,7 @@ static uint8_t adc_idx;
  */
 static uint16_t adc_dma_buffer[BSP_ADC_DEVICE_CNT][BSP_ADC_CHANNEL_CNT_MAX] BSP_ADC_DMA_BUFFER_ATTR;
 
-static void ADCAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *aligned_address, int32_t *aligned_size)
+static void ADCAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t* aligned_address, int32_t* aligned_size)
 {
     uintptr_t start = address & ~((uintptr_t)BSP_ADC_DCACHE_LINE_SIZE - 1U);
     uintptr_t end = (address + size + BSP_ADC_DCACHE_LINE_SIZE - 1U) & ~((uintptr_t)BSP_ADC_DCACHE_LINE_SIZE - 1U);
@@ -30,7 +30,7 @@ static void ADCAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *ali
     *aligned_size = (int32_t)(end - start);
 }
 
-static void ADCCleanInvalidateDCacheByAddr(const void *buffer, uint32_t len)
+static void ADCCleanInvalidateDCacheByAddr(const void* buffer, uint32_t len)
 {
 #if BSP_ADC_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -42,14 +42,14 @@ static void ADCCleanInvalidateDCacheByAddr(const void *buffer, uint32_t len)
     }
 
     ADCAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_CleanInvalidateDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_CleanInvalidateDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     (void)buffer;
     (void)len;
 #endif
 }
 
-static void ADCInvalidateDCacheByAddr(const void *buffer, uint32_t len)
+static void ADCInvalidateDCacheByAddr(const void* buffer, uint32_t len)
 {
 #if BSP_ADC_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -61,14 +61,14 @@ static void ADCInvalidateDCacheByAddr(const void *buffer, uint32_t len)
     }
 
     ADCAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_InvalidateDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_InvalidateDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     (void)buffer;
     (void)len;
 #endif
 }
 
-static ADCInstance *ADCFindInstance(ADC_HandleTypeDef *hadc)
+static ADCInstance* ADCFindInstance(ADC_HandleTypeDef* hadc)
 {
     for (uint8_t i = 0; i < adc_idx; i++)
     {
@@ -81,7 +81,7 @@ static ADCInstance *ADCFindInstance(ADC_HandleTypeDef *hadc)
     return NULL;
 }
 
-static float ADCGetResolutionMax(ADC_HandleTypeDef *hadc)
+static float ADCGetResolutionMax(ADC_HandleTypeDef* hadc)
 {
     if (hadc == NULL)
     {
@@ -115,9 +115,9 @@ static float ADCGetResolutionMax(ADC_HandleTypeDef *hadc)
     }
 }
 
-ADCInstance *ADCRegister(ADC_Init_Config_s *config)
+ADCInstance* ADCRegister(ADC_Init_Config_s* config)
 {
-    ADCInstance *instance;
+    ADCInstance* instance;
 
     if (config == NULL || config->adc_handle == NULL)
     {
@@ -158,7 +158,7 @@ ADCInstance *ADCRegister(ADC_Init_Config_s *config)
     return instance;
 }
 
-HAL_StatusTypeDef ADCStart(ADCInstance *instance)
+HAL_StatusTypeDef ADCStart(ADCInstance* instance)
 {
     HAL_StatusTypeDef status;
     uint32_t buffer_size;
@@ -173,7 +173,7 @@ HAL_StatusTypeDef ADCStart(ADCInstance *instance)
     memset(instance->dma_buffer, 0, buffer_size);
     ADCCleanInvalidateDCacheByAddr(instance->dma_buffer, buffer_size);
 
-    status = HAL_ADC_Start_DMA(instance->adc_handle, (uint32_t *)instance->dma_buffer, instance->channel_count);
+    status = HAL_ADC_Start_DMA(instance->adc_handle, (uint32_t*)instance->dma_buffer, instance->channel_count);
     if (status == HAL_OK)
     {
         instance->started = 1U;
@@ -186,7 +186,7 @@ HAL_StatusTypeDef ADCStart(ADCInstance *instance)
     return status;
 }
 
-HAL_StatusTypeDef ADCStop(ADCInstance *instance)
+HAL_StatusTypeDef ADCStop(ADCInstance* instance)
 {
     HAL_StatusTypeDef status;
 
@@ -209,7 +209,7 @@ HAL_StatusTypeDef ADCStop(ADCInstance *instance)
     return status;
 }
 
-uint16_t ADCGetRaw(ADCInstance *instance, uint8_t channel_index)
+uint16_t ADCGetRaw(ADCInstance* instance, uint8_t channel_index)
 {
     if (instance == NULL || instance->dma_buffer == NULL || channel_index >= instance->channel_count)
     {
@@ -220,7 +220,7 @@ uint16_t ADCGetRaw(ADCInstance *instance, uint8_t channel_index)
     return instance->dma_buffer[channel_index];
 }
 
-float ADCGetVoltage(ADCInstance *instance, uint8_t channel_index)
+float ADCGetVoltage(ADCInstance* instance, uint8_t channel_index)
 {
     uint16_t raw = ADCGetRaw(instance, channel_index);
 
@@ -232,24 +232,24 @@ float ADCGetVoltage(ADCInstance *instance, uint8_t channel_index)
     return ((float)raw * instance->vref) / ADCGetResolutionMax(instance->adc_handle);
 }
 
-uint32_t ADCGetUpdateCount(ADCInstance *instance)
+uint32_t ADCGetUpdateCount(ADCInstance* instance)
 {
     return instance == NULL ? 0U : instance->update_count;
 }
 
-uint32_t ADCGetErrorCount(ADCInstance *instance)
+uint32_t ADCGetErrorCount(ADCInstance* instance)
 {
     return instance == NULL ? 0U : instance->error_count;
 }
 
-uint32_t ADCGetLastError(ADCInstance *instance)
+uint32_t ADCGetLastError(ADCInstance* instance)
 {
     return instance == NULL ? 0U : instance->last_error;
 }
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-    ADCInstance *instance = ADCFindInstance(hadc);
+    ADCInstance* instance = ADCFindInstance(hadc);
 
     if (instance != NULL)
     {
@@ -257,9 +257,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
     }
 }
 
-void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
+void HAL_ADC_ErrorCallback(ADC_HandleTypeDef* hadc)
 {
-    ADCInstance *instance = ADCFindInstance(hadc);
+    ADCInstance* instance = ADCFindInstance(hadc);
 
     if (instance != NULL)
     {

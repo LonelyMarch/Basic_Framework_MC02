@@ -44,23 +44,38 @@ typedef struct
     Motor_Reverse_Flag_e motor_reverse_flag;
     float torque_ref_nm;
     Motor_Working_Type_e stop_flag;
-    CANInstance *motor_can_instance;
-    DaemonInstance *motor_daemon;
+    CANInstance* motor_can_instance;
+    DaemonInstance* motor_daemon;
     uint8_t expected_motor_id;
     volatile uint8_t offline;
     volatile uint8_t enabled;
 } HTMotorInstance;
 
-HTMotorInstance *HTMotorInit(const HTMotor_Init_Config_s *config);
 
-HAL_StatusTypeDef HTMotorSetTorque(HTMotorInstance *motor, float torque_nm);
-HAL_StatusTypeDef HTMotorStop(HTMotorInstance *motor);
-HAL_StatusTypeDef HTMotorEnable(HTMotorInstance *motor);
-HAL_StatusTypeDef HTMotorDisable(HTMotorInstance *motor);
-HAL_StatusTypeDef HTMotorSetCurrentPositionAsZero(HTMotorInstance *motor);
+HTMotorInstance* HTMotorInit(const HTMotor_Init_Config_s* config);
+
+
+HAL_StatusTypeDef HTMotorSetTorque(HTMotorInstance* motor, float torque_nm);
+
+
+HAL_StatusTypeDef HTMotorStop(HTMotorInstance* motor);
+
+
+HAL_StatusTypeDef HTMotorEnable(HTMotorInstance* motor);
+
+
+HAL_StatusTypeDef HTMotorDisable(HTMotorInstance* motor);
+
+
+HAL_StatusTypeDef HTMotorSetCurrentPositionAsZero(HTMotorInstance* motor);
+
 
 void HTMotorControl(void);
-uint8_t HTMotorIsOnline(const HTMotorInstance *motor);
-uint8_t HTMotorIsEnabled(const HTMotorInstance *motor);
+
+
+uint8_t HTMotorIsOnline(const HTMotorInstance* motor);
+
+
+uint8_t HTMotorIsEnabled(const HTMotorInstance* motor);
 
 #endif

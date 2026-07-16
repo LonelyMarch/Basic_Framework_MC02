@@ -21,21 +21,21 @@
  */
 typedef struct
 {
-    SPI_HandleTypeDef *handle;        // 该资源对应的SPI硬件句柄
-    osMutexId_t mutex;                // 同一条SPI总线的互斥锁
-    osSemaphoreId_t complete_sem;     // IT/DMA传输完成信号量
-    SPIInstance *active_instance;     // 当前正在占用该总线的SPI从设备实例
-    HAL_StatusTypeDef last_status;    // 最近一次异步传输结果
-    uint8_t *dma_tx_buffer;            // RAM_D2中的DMA发送中转缓冲区
-    uint8_t *dma_rx_buffer;            // RAM_D2中的DMA接收中转缓冲区
+    SPI_HandleTypeDef* handle; // 该资源对应的SPI硬件句柄
+    osMutexId_t mutex; // 同一条SPI总线的互斥锁
+    osSemaphoreId_t complete_sem; // IT/DMA传输完成信号量
+    SPIInstance* active_instance; // 当前正在占用该总线的SPI从设备实例
+    HAL_StatusTypeDef last_status; // 最近一次异步传输结果
+    uint8_t* dma_tx_buffer; // RAM_D2中的DMA发送中转缓冲区
+    uint8_t* dma_rx_buffer; // RAM_D2中的DMA接收中转缓冲区
     volatile uint8_t os_objects_ready; // mutex/semaphore是否已经完整创建
 } SPIBusResource;
 
 /* 所有的spi instance保存于此,用于callback时判断中断来源*/
 static SPIInstance spi_instance_pool[SPI_MX_INSTANCE_CNT]; // SPI实例静态池,控制结构体放默认.bss/DTCM
-static SPIInstance *spi_instance[SPI_MX_INSTANCE_CNT] = {NULL};
+static SPIInstance* spi_instance[SPI_MX_INSTANCE_CNT] = {NULL};
 static SPIBusResource spi_bus[SPI_BUS_CNT] = {0};
-static uint8_t idx = 0;     // 已注册的SPI从设备实例数量
+static uint8_t idx = 0; // 已注册的SPI从设备实例数量
 static uint8_t bus_idx = 0; // 已登记的SPI硬件总线数量
 static uint8_t pre_rtos_fallback_warned = 0U; // RTOS启动前IT/DMA降级提示只打印一次,避免初始化阶段刷屏
 
@@ -49,7 +49,9 @@ static uint8_t spi_dma_rx_buffer[SPI_BUS_CNT][SPI_DMA_BOUNCE_BUFFER_SIZE] SPI_DM
  * 注册阶段属于系统基础资源初始化。为了保持原框架“初始化失败立即停机”的语义,
  * 这里先打印错误原因,再进入Error_Handler(),避免错误继续扩散到后续业务代码。
  */
-__attribute__((noreturn)) static void SPIRegisterErrorHandler(const char *error_msg)
+__attribute__ ((noreturn))
+
+static void SPIRegisterErrorHandler(const char* error_msg)
 {
     LOGERROR("[bsp_spi] SPI注册失败: %s", error_msg);
     Error_Handler();
@@ -86,7 +88,7 @@ static void SPIWarnPreRtosFallback(SPI_TXRX_MODE_e mode)
  * @param handle SPI硬件句柄
  * @return 找到则返回对应资源,否则返回NULL
  */
-static SPIBusResource *SPIFindBusByHandle(SPI_HandleTypeDef *handle)
+static SPIBusResource* SPIFindBusByHandle(SPI_HandleTypeDef* handle)
 {
     for (uint8_t i = 0; i < bus_idx; i++)
     {
@@ -105,7 +107,7 @@ static SPIBusResource *SPIFindBusByHandle(SPI_HandleTypeDef *handle)
  * 同一个SPI从设备不应被重复注册,否则两个实例会控制同一根CS线,
  * 上层看起来像两个设备,底层实际会访问同一个从机。
  */
-static SPIInstance *SPIFindInstanceByChipSelect(SPI_HandleTypeDef *handle, GPIO_TypeDef *GPIOx, uint16_t cs_pin)
+static SPIInstance* SPIFindInstanceByChipSelect(SPI_HandleTypeDef* handle, GPIO_TypeDef* GPIOx, uint16_t cs_pin)
 {
     for (uint8_t i = 0; i < idx; i++)
     {
@@ -134,9 +136,9 @@ static SPIInstance *SPIFindInstanceByChipSelect(SPI_HandleTypeDef *handle, GPIO_
  * @param handle SPI硬件句柄
  * @return 对应的总线资源
  */
-static SPIBusResource *SPIGetOrCreateBus(SPI_HandleTypeDef *handle)
+static SPIBusResource* SPIGetOrCreateBus(SPI_HandleTypeDef* handle)
 {
-    SPIBusResource *bus = SPIFindBusByHandle(handle);
+    SPIBusResource* bus = SPIFindBusByHandle(handle);
     uint8_t new_bus_idx;
     if (bus != NULL)
     {
@@ -189,7 +191,7 @@ static HAL_StatusTypeDef SPICheckDmaLength(uint16_t len)
  * 这里不自动退回阻塞模式,因为调用者显式选择DMA时通常是为了验证DMA链路。
  * 若CubeMX配置缺失,直接返回HAL_ERROR并打印明确日志,避免静默卡在等待完成信号。
  */
-static HAL_StatusTypeDef SPICheckDmaReady(SPIInstance *spi_ins, uint8_t need_tx, uint8_t need_rx)
+static HAL_StatusTypeDef SPICheckDmaReady(SPIInstance* spi_ins, uint8_t need_tx, uint8_t need_rx)
 {
     if (spi_ins == NULL || spi_ins->spi_handle == NULL)
     {
@@ -218,7 +220,7 @@ static HAL_StatusTypeDef SPICheckDmaReady(SPIInstance *spi_ins, uint8_t need_tx,
  * CMSIS的按地址清理/失效接口要求传入的起始地址和长度覆盖完整cache line,
  * 因此这里统一做向下/向上对齐,避免只维护到半行数据。
  */
-static void SPIAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *aligned_address, int32_t *aligned_size)
+static void SPIAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t* aligned_address, int32_t* aligned_size)
 {
     uintptr_t start = address & ~((uintptr_t)SPI_DCACHE_LINE_SIZE - 1U);
     uintptr_t end = (address + size + SPI_DCACHE_LINE_SIZE - 1U) & ~((uintptr_t)SPI_DCACHE_LINE_SIZE - 1U);
@@ -233,7 +235,7 @@ static void SPIAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *ali
  * CPU刚写入TX缓冲区时,数据可能还停留在D-Cache中。启动DMA发送前需要Clean,
  * 把cache里的新数据写回SRAM,确保DMA读到的是最新发送内容。
  */
-static void SPICleanDCacheByAddr(const void *buffer, uint16_t len)
+static void SPICleanDCacheByAddr(const void* buffer, uint16_t len)
 {
 #if SPI_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -245,7 +247,7 @@ static void SPICleanDCacheByAddr(const void *buffer, uint16_t len)
     }
 
     SPIAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_CleanDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_CleanDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     (void)buffer;
     (void)len;
@@ -258,7 +260,7 @@ static void SPICleanDCacheByAddr(const void *buffer, uint16_t len)
  * DMA接收完成后,SRAM中已经是新数据,但CPU可能仍持有旧cache副本。
  * 读取RX缓冲区前需要Invalidate,强制CPU从SRAM重新取回DMA写入的数据。
  */
-static void SPIInvalidateDCacheByAddr(const void *buffer, uint16_t len)
+static void SPIInvalidateDCacheByAddr(const void* buffer, uint16_t len)
 {
 #if SPI_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -270,7 +272,7 @@ static void SPIInvalidateDCacheByAddr(const void *buffer, uint16_t len)
     }
 
     SPIAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_InvalidateDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_InvalidateDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     (void)buffer;
     (void)len;
@@ -283,7 +285,7 @@ static void SPIInvalidateDCacheByAddr(const void *buffer, uint16_t len)
  * 当前主要由SPIBusOsInit()在osKernelInitialize()之后、任务启动前统一创建。
  * 若后续确实在任务运行期动态注册SPI总线,本函数也会在第一次访问时兜底创建。
  */
-static HAL_StatusTypeDef SPIEnsureBusOsObjects(SPIBusResource *bus)
+static HAL_StatusTypeDef SPIEnsureBusOsObjects(SPIBusResource* bus)
 {
     const osMutexAttr_t mutex_attr = {
         .name = "bsp_spi_mutex",
@@ -355,7 +357,8 @@ static HAL_StatusTypeDef SPIEnsureBusOsObjects(SPIBusResource *bus)
         }
 
         bus->os_objects_ready = 1U;
-    } while (0);
+    }
+    while (0);
 
     if (kernel_lock >= 0)
     {
@@ -383,7 +386,7 @@ HAL_StatusTypeDef SPIBusOsInit(void)
  *
  * 发起新的IT/DMA事务前要清掉可能遗留的完成信号,避免立刻误判为本次传输完成。
  */
-static void SPIClearCompleteSem(SPIBusResource *bus)
+static void SPIClearCompleteSem(SPIBusResource* bus)
 {
     while (osSemaphoreAcquire(bus->complete_sem, 0) == osOK)
     {
@@ -396,9 +399,9 @@ static void SPIClearCompleteSem(SPIBusResource *bus)
  * RTOS启动前没有多任务并发,只允许阻塞HAL路径继续执行。RTOS启动后,
  * 每次事务必须先拿到对应硬件总线的mutex,避免同一条SPI总线上多个片选同时有效。
  */
-static HAL_StatusTypeDef SPILockBus(SPIInstance *spi_ins, SPIBusResource **bus_out, uint8_t *need_unlock)
+static HAL_StatusTypeDef SPILockBus(SPIInstance* spi_ins, SPIBusResource** bus_out, uint8_t* need_unlock)
 {
-    SPIBusResource *bus;
+    SPIBusResource* bus;
 
     if (spi_ins == NULL || spi_ins->spi_handle == NULL || bus_out == NULL || need_unlock == NULL)
     {
@@ -445,7 +448,7 @@ static HAL_StatusTypeDef SPILockBus(SPIInstance *spi_ins, SPIBusResource **bus_o
 /**
  * @brief 释放SPI总线使用权
  */
-static void SPIUnlockBus(SPIBusResource *bus, uint8_t need_unlock)
+static void SPIUnlockBus(SPIBusResource* bus, uint8_t need_unlock)
 {
     if (bus == NULL)
     {
@@ -463,7 +466,7 @@ static void SPIUnlockBus(SPIBusResource *bus, uint8_t need_unlock)
 /**
  * @brief 拉低片选,开始一次SPI事务
  */
-static void SPISelectDevice(SPIInstance *spi_ins, SPIBusResource *bus)
+static void SPISelectDevice(SPIInstance* spi_ins, SPIBusResource* bus)
 {
     bus->active_instance = spi_ins;
     HAL_GPIO_WritePin(spi_ins->GPIOx, spi_ins->cs_pin, GPIO_PIN_RESET);
@@ -473,7 +476,7 @@ static void SPISelectDevice(SPIInstance *spi_ins, SPIBusResource *bus)
 /**
  * @brief 拉高片选,结束一次SPI事务
  */
-static void SPIDeselectDevice(SPIInstance *spi_ins)
+static void SPIDeselectDevice(SPIInstance* spi_ins)
 {
     HAL_GPIO_WritePin(spi_ins->GPIOx, spi_ins->cs_pin, GPIO_PIN_SET);
     spi_ins->CS_State = HAL_GPIO_ReadPin(spi_ins->GPIOx, spi_ins->cs_pin);
@@ -485,7 +488,7 @@ static void SPIDeselectDevice(SPIInstance *spi_ins)
  * HAL_StatusTypeDef只能表示OK/ERROR/BUSY/TIMEOUT这类粗粒度状态,
  * hspi->ErrorCode能进一步指出是否发生OVR、MODF、DMA等底层错误。
  */
-static void SPILogTransferError(const char *op, SPIInstance *spi_ins, HAL_StatusTypeDef status)
+static void SPILogTransferError(const char* op, SPIInstance* spi_ins, HAL_StatusTypeDef status)
 {
     uint32_t error_code = 0U;
 
@@ -506,7 +509,7 @@ static void SPILogTransferError(const char *op, SPIInstance *spi_ins, HAL_Status
  * 正常完成、错误中断、Abort完成都会释放complete_sem。若等待超时,
  * 主动发起Abort,尽量让HAL状态机回到可再次使用的状态。
  */
-static HAL_StatusTypeDef SPIWaitAsyncDone(SPIInstance *spi_ins, SPIBusResource *bus)
+static HAL_StatusTypeDef SPIWaitAsyncDone(SPIInstance* spi_ins, SPIBusResource* bus)
 {
     if (spi_ins == NULL || spi_ins->spi_handle == NULL || bus == NULL)
     {
@@ -541,9 +544,9 @@ static HAL_StatusTypeDef SPIWaitAsyncDone(SPIInstance *spi_ins, SPIBusResource *
  * HAL的SPI完成/错误回调运行在中断上下文,这里不做日志、不阻塞,
  * 只记录结果并释放信号量。真正的片选释放和用户回调在任务上下文完成。
  */
-static void SPINotifyDone(SPI_HandleTypeDef *hspi, HAL_StatusTypeDef status)
+static void SPINotifyDone(SPI_HandleTypeDef* hspi, HAL_StatusTypeDef status)
 {
-    SPIBusResource *bus = SPIFindBusByHandle(hspi);
+    SPIBusResource* bus = SPIFindBusByHandle(hspi);
     if (bus == NULL || bus->complete_sem == NULL || bus->active_instance == NULL)
     {
         return;
@@ -556,9 +559,9 @@ static void SPINotifyDone(SPI_HandleTypeDef *hspi, HAL_StatusTypeDef status)
 /**
  * @brief 注册一个spi instance
  */
-SPIInstance *SPIRegister(SPI_Init_Config_s *conf)
+SPIInstance* SPIRegister(SPI_Init_Config_s* conf)
 {
-    SPIInstance *instance;
+    SPIInstance* instance;
 
     if (conf == NULL)
     {
@@ -602,10 +605,10 @@ SPIInstance *SPIRegister(SPI_Init_Config_s *conf)
     return instance;
 }
 
-HAL_StatusTypeDef SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
+HAL_StatusTypeDef SPITransmit(SPIInstance* spi_ins, uint8_t* ptr_data, uint16_t len)
 {
     HAL_StatusTypeDef status;
-    SPIBusResource *bus;
+    SPIBusResource* bus;
     SPI_TXRX_MODE_e work_mode;
     uint8_t need_unlock;
 
@@ -682,10 +685,10 @@ HAL_StatusTypeDef SPITransmit(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t 
     return status;
 }
 
-HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
+HAL_StatusTypeDef SPIRecv(SPIInstance* spi_ins, uint8_t* ptr_data, uint16_t len)
 {
     HAL_StatusTypeDef status;
-    SPIBusResource *bus;
+    SPIBusResource* bus;
     SPI_TXRX_MODE_e work_mode;
     uint8_t need_unlock;
 
@@ -778,10 +781,10 @@ HAL_StatusTypeDef SPIRecv(SPIInstance *spi_ins, uint8_t *ptr_data, uint16_t len)
     return status;
 }
 
-HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8_t *ptr_data_tx, uint16_t len)
+HAL_StatusTypeDef SPITransRecv(SPIInstance* spi_ins, uint8_t* ptr_data_rx, uint8_t* ptr_data_tx, uint16_t len)
 {
     HAL_StatusTypeDef status;
-    SPIBusResource *bus;
+    SPIBusResource* bus;
     SPI_TXRX_MODE_e work_mode;
     uint8_t need_unlock;
 
@@ -880,7 +883,7 @@ HAL_StatusTypeDef SPITransRecv(SPIInstance *spi_ins, uint8_t *ptr_data_rx, uint8
 /**
  * @brief HAL SPI发送完成回调
  */
-void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef* hspi)
 {
     SPINotifyDone(hspi, HAL_OK);
 }
@@ -888,7 +891,7 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 /**
  * @brief HAL SPI接收完成回调
  */
-void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
+void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef* hspi)
 {
     SPINotifyDone(hspi, HAL_OK);
 }
@@ -896,7 +899,7 @@ void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
 /**
  * @brief HAL SPI收发完成回调
  */
-void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef* hspi)
 {
     SPINotifyDone(hspi, HAL_OK);
 }
@@ -904,7 +907,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 /**
  * @brief HAL SPI错误回调
  */
-void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef* hspi)
 {
     SPINotifyDone(hspi, HAL_ERROR);
 }
@@ -912,7 +915,7 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
 /**
  * @brief HAL SPI Abort完成回调
  */
-void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
+void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef* hspi)
 {
     SPINotifyDone(hspi, HAL_TIMEOUT);
 }

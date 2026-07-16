@@ -13,7 +13,8 @@ LOG("raw text");
 
 日志接口不支持浮点格式化输出。需要打印浮点值时,建议先换算成整数单位。
 
-Debug 配置默认保留日志。Release、RelWithDebInfo、MinSizeRel 等配置可通过 `DISABLE_LOG_SYSTEM=1` 关闭 `LOGINFO/LOGWARNING/LOGERROR`。
+Debug 配置默认保留日志。Release、RelWithDebInfo、MinSizeRel 等配置可通过 `DISABLE_LOG_SYSTEM=1` 关闭
+`LOGINFO/LOGWARNING/LOGERROR`。
 
 ## 队列化输出
 
@@ -25,7 +26,8 @@ FreeRTOS 调度器启动前还没有 `BSPServiceTask`,日志会直接输出到 R
 LOG宏 -> 格式化到短buffer -> 投递到日志队列 -> BSPServiceTask统一输出RTT/USB
 ```
 
-单条日志最大长度由 `BSP_LOG_LINE_SIZE` 控制。队列深度由 `BSP_LOG_QUEUE_SIZE` 控制。队列满时新日志会被丢弃,可通过 `BSPLogGetDroppedCount()` 查看。
+单条日志最大长度由 `BSP_LOG_LINE_SIZE` 控制。队列深度由 `BSP_LOG_QUEUE_SIZE` 控制。队列满时新日志会被丢弃,可通过
+`BSPLogGetDroppedCount()` 查看。
 
 ## 中断约束
 
@@ -41,7 +43,8 @@ LOG宏 -> 格式化到短buffer -> 投递到日志队列 -> BSPServiceTask统一
 #define BSP_LOG_USE_USB 0U
 ```
 
-若定义 `BSP_LOG_USE_USB=1`,日志会额外调用 `USBTransmit()` 发送到 USB CDC。但 USB 可能同时承担视觉、VOFA 或调试数据通道,开启前需要确认不会互相抢占。
+若定义 `BSP_LOG_USE_USB=1`,日志会额外调用 `USBTransmit()` 发送到 USB CDC。但 USB 可能同时承担视觉、VOFA
+或调试数据通道,开启前需要确认不会互相抢占。
 
 ## 调试工具
 

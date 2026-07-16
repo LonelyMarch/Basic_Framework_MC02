@@ -84,7 +84,8 @@ CAN协议使用标准帧、DLC 8：
 - IMU反馈ID：注册配置中的`mst_id`。
 - 默认波特率：官方文档为1 Mbps，实际外设参数由CubeMX配置。
 
-PDF附录三仍保留了一个旧版`StdId = 0x6FF、DLC = 4`请求片段，它与V1.2正文第8~9页更新后的`CAN_ID、DLC = 8、CC RID 读/写 DD 数据`协议冲突。本驱动按V1.2正文和新版官方`DM-IMU/dm_imu.c`实现，不采用附录三旧请求格式。
+PDF附录三仍保留了一个旧版`StdId = 0x6FF、DLC = 4`请求片段，它与V1.2正文第8~9页更新后的`CAN_ID、DLC = 8、CC RID 读/写 DD 数据`
+协议冲突。本驱动按V1.2正文和新版官方`DM-IMU/dm_imu.c`实现，不采用附录三旧请求格式。
 
 ## 5. RS485实例注册
 
@@ -124,13 +125,13 @@ if (DMIMUGetMeasure(external_imu, &measure) != 0U)
 
 统一单位：
 
-| 字段 | 单位/含义 |
-| --- | --- |
-| `accel_mps2[3]` | m/s² |
-| `gyro_rad_s[3]` | rad/s |
-| `roll_deg/pitch_deg/yaw_deg` | degree |
-| `quaternion[4]` | w、x、y、z |
-| `temperature_c` | 摄氏度，仅CAN加速度帧携带 |
+| 字段                           | 单位/含义          |
+|------------------------------|----------------|
+| `accel_mps2[3]`              | m/s²           |
+| `gyro_rad_s[3]`              | rad/s          |
+| `roll_deg/pitch_deg/yaw_deg` | degree         |
+| `quaternion[4]`              | w、x、y、z        |
+| `temperature_c`              | 摄氏度，仅CAN加速度帧携带 |
 
 `valid_mask`表示哪些类型至少收到过一次，四类数据还分别带有更新时间和更新计数。读取测量数据不会清除任何全局“updated”标志，因此多个上层消费者不会互相影响。
 
@@ -195,7 +196,8 @@ PDF位域表规定`DATA[2]`的bit7~2是`W[5:0]`。官方例程使用`0xF8`掩码
 
 RS485接收采用流缓存扫描，支持拆包、粘包、任意数据类型组合和噪声重同步，不要求设备必须一次发送默认80字节完整组合包。
 
-PDF附录四给出的CRC表使用多项式`0x1021`，但更新表达式采用`crc << 1`，不同于常见CCITT查表代码的`crc << 8`。通过PDF内DM-Upper上位机截图中的真实十六进制帧核算，可以确认设备使用附录原样算法，并以CRC低字节在前发送。官方RS485例程自身没有执行CRC校验。驱动因此：
+PDF附录四给出的CRC表使用多项式`0x1021`，但更新表达式采用`crc << 1`，不同于常见CCITT查表代码的`crc << 8`
+。通过PDF内DM-Upper上位机截图中的真实十六进制帧核算，可以确认设备使用附录原样算法，并以CRC低字节在前发送。官方RS485例程自身没有执行CRC校验。驱动因此：
 
 1. 首选PDF附录原样`crc << 1`算法、小端CRC字节序。
 2. 兼容PDF算法结果的大端字节序。

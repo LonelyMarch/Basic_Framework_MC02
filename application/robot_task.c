@@ -21,16 +21,18 @@
 #define MOTOR_TASK_PERIOD_MS 1U  // 通信型电机统一管理周期，默认 1 kHz。
 #define APP_TASK_PERIOD_MS 5U    // APP 状态机与目标更新周期，默认 200 Hz。
 
-static osThreadId_t motor_task_handle;  // 通信型电机统一管理任务句柄。
+static osThreadId_t motor_task_handle; // 通信型电机统一管理任务句柄。
 static osThreadId_t daemon_task_handle; // 模块在线监测任务句柄。
-static osThreadId_t app_task_handle;    // APP 控制调度任务句柄。
+static osThreadId_t app_task_handle; // APP 控制调度任务句柄。
 
 /**
  * @brief 电机统一管理任务入口。
  *
  * @param argument CMSIS-RTOS2 任务参数，当前未使用。
  */
-static __attribute__((noreturn)) void StartMotorTask(void *argument)
+static __attribute__ ((noreturn))
+
+void StartMotorTask(void* argument)
 {
     (void)argument;
 
@@ -47,7 +49,9 @@ static __attribute__((noreturn)) void StartMotorTask(void *argument)
  *
  * @param argument CMSIS-RTOS2 任务参数，当前未使用。
  */
-static __attribute__((noreturn)) void StartDaemonTask(void *argument)
+static __attribute__ ((noreturn))
+
+void StartDaemonTask(void* argument)
 {
     (void)argument;
 
@@ -64,7 +68,9 @@ static __attribute__((noreturn)) void StartDaemonTask(void *argument)
  *
  * @param argument CMSIS-RTOS2 任务参数，当前未使用。
  */
-static __attribute__((noreturn)) void StartAppTask(void *argument)
+static __attribute__ ((noreturn))
+
+void StartAppTask(void* argument)
 {
     (void)argument;
 

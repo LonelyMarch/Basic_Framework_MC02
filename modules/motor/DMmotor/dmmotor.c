@@ -102,36 +102,36 @@ static void DM_ClearTarget(DMMotorInstance* motor)
     switch (motor->mode)
     {
     case DM_MODE_MIT_ENUM:
-    {
-        DMMotorMitArgs* args = (DMMotorMitArgs*)motor->args;
-        args->position = 0.0f;
-        args->velocity = 0.0f;
-        args->kp = 0.0f;
-        args->kd = 0.0f;
-        args->torque_ff = 0.0f;
-        break;
-    }
+        {
+            DMMotorMitArgs* args = (DMMotorMitArgs*)motor->args;
+            args->position = 0.0f;
+            args->velocity = 0.0f;
+            args->kp = 0.0f;
+            args->kd = 0.0f;
+            args->torque_ff = 0.0f;
+            break;
+        }
 
     case DM_MODE_POS_VEL_ENUM:
-    {
-        DMMotorPosVelArgs* args = (DMMotorPosVelArgs*)motor->args;
-        args->position = 0.0f;
-        args->velocity_limit = 0.0f;
-        break;
-    }
+        {
+            DMMotorPosVelArgs* args = (DMMotorPosVelArgs*)motor->args;
+            args->position = 0.0f;
+            args->velocity_limit = 0.0f;
+            break;
+        }
 
     case DM_MODE_VEL_ENUM:
         ((DMMotorVelArgs*)motor->args)->velocity = 0.0f;
         break;
 
     case DM_MODE_EMIT_ENUM:
-    {
-        DMMotorEmitArgs* args = (DMMotorEmitArgs*)motor->args;
-        args->position = 0.0f;
-        args->vel_limit = 0.0f;
-        args->cur_limit = 0.0f;
-        break;
-    }
+        {
+            DMMotorEmitArgs* args = (DMMotorEmitArgs*)motor->args;
+            args->position = 0.0f;
+            args->vel_limit = 0.0f;
+            args->cur_limit = 0.0f;
+            break;
+        }
 
     case DM_MODE_1TO4_ENUM:
         ((DMMotor1To4Args*)motor->args)->target = 0.0f;

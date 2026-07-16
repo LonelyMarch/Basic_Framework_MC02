@@ -31,17 +31,18 @@ flowchart TD
     AppTaskInit --> KernelStart["osKernelStart()"]
 ```
 
-所有模块实例和消息 topic 应在 `RobotInit()` 的消息中心初始化与锁定之间完成注册。所有 RTOS 线程必须在 `osKernelInitialize()` 之后创建。
+所有模块实例和消息 topic 应在 `RobotInit()` 的消息中心初始化与锁定之间完成注册。所有 RTOS 线程必须在
+`osKernelInitialize()` 之后创建。
 
 ## 当前任务
 
-| 任务 | 默认周期 | 优先级 | 当前职责 |
-| --- | ---: | --- | --- |
-| `motor_task` | 1 ms | AboveNormal | 调用 `MotorControlTask()`，统一调度已注册通信型电机；当前无实例 |
-| `daemon_task` | 10 ms | Normal | 调用 `DaemonTask()`，维护已注册在线检测实例；当前无实例 |
-| `app_task` | 5 ms | Normal | 调用 `RobotTask()`，依次运行 cmd、gimbal、chassis、shoot 空入口 |
-| BSP 后台任务 | 由 BSP 决定 | High/Normal/Low | 处理 CAN、BSP 延后事件和异步 Flash |
-| `defaultTask` | CubeMX 配置 | Normal | CubeMX 默认任务，保留 USB Device 等生成代码入口 |
+| 任务            |      默认周期 | 优先级             | 当前职责                                               |
+|---------------|----------:|-----------------|----------------------------------------------------|
+| `motor_task`  |      1 ms | AboveNormal     | 调用 `MotorControlTask()`，统一调度已注册通信型电机；当前无实例         |
+| `daemon_task` |     10 ms | Normal          | 调用 `DaemonTask()`，维护已注册在线检测实例；当前无实例                |
+| `app_task`    |      5 ms | Normal          | 调用 `RobotTask()`，依次运行 cmd、gimbal、chassis、shoot 空入口 |
+| BSP 后台任务      |  由 BSP 决定 | High/Normal/Low | 处理 CAN、BSP 延后事件和异步 Flash                           |
+| `defaultTask` | CubeMX 配置 | Normal          | CubeMX 默认任务，保留 USB Device 等生成代码入口                  |
 
 APP 控制顺序固定为：
 

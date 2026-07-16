@@ -51,13 +51,13 @@
  */
 typedef enum
 {
-    MESSAGE_TOPIC_GIMBAL_CMD = 0,   /*!< robot_cmd发布给gimbal的云台控制命令 */
-    MESSAGE_TOPIC_GIMBAL_FEED,      /*!< gimbal发布给robot_cmd的云台反馈 */
-    MESSAGE_TOPIC_SHOOT_CMD,        /*!< robot_cmd发布给shoot的发射控制命令 */
-    MESSAGE_TOPIC_SHOOT_FEED,       /*!< shoot发布给robot_cmd的发射反馈 */
-    MESSAGE_TOPIC_CHASSIS_CMD,      /*!< robot_cmd发布给chassis的底盘控制命令 */
-    MESSAGE_TOPIC_CHASSIS_FEED,     /*!< chassis发布给robot_cmd的底盘反馈 */
-    MESSAGE_TOPIC_COUNT,            /*!< topic数量，必须放在枚举末尾 */
+    MESSAGE_TOPIC_GIMBAL_CMD = 0, /*!< robot_cmd发布给gimbal的云台控制命令 */
+    MESSAGE_TOPIC_GIMBAL_FEED, /*!< gimbal发布给robot_cmd的云台反馈 */
+    MESSAGE_TOPIC_SHOOT_CMD, /*!< robot_cmd发布给shoot的发射控制命令 */
+    MESSAGE_TOPIC_SHOOT_FEED, /*!< shoot发布给robot_cmd的发射反馈 */
+    MESSAGE_TOPIC_CHASSIS_CMD, /*!< robot_cmd发布给chassis的底盘控制命令 */
+    MESSAGE_TOPIC_CHASSIS_FEED, /*!< chassis发布给robot_cmd的底盘反馈 */
+    MESSAGE_TOPIC_COUNT, /*!< topic数量，必须放在枚举末尾 */
 } MessageCenterTopic_e;
 
 /**
@@ -85,6 +85,7 @@ typedef struct MessageCenterSubscriber MessageCenterSubscriber_t;
  */
 void MessageCenterInit(void);
 
+
 /**
  * @brief 锁定注册阶段。
  *
@@ -94,6 +95,7 @@ void MessageCenterInit(void);
  */
 void MessageCenterLockRegistration(void);
 
+
 /**
  * @brief 获取topic调试名称。
  *
@@ -101,6 +103,7 @@ void MessageCenterLockRegistration(void);
  * @return 合法topic返回Flash中的只读调试名，非法topic返回"invalid_topic"。
  */
 const char* MessageCenterTopicName(MessageCenterTopic_e topic_id);
+
 
 /**
  * @brief 注册一个topic发布者。
@@ -112,6 +115,7 @@ const char* MessageCenterTopicName(MessageCenterTopic_e topic_id);
  * @note 同一个topic允许重复注册发布者，但消息长度必须一致。重复注册会返回同一个topic句柄。
  */
 MessageCenterPublisher_t* MessageCenterRegisterPublisher(MessageCenterTopic_e topic_id, size_t data_len);
+
 
 /**
  * @brief 注册一个topic订阅者。
@@ -127,6 +131,7 @@ MessageCenterSubscriber_t* MessageCenterRegisterSubscriber(MessageCenterTopic_e 
                                                            size_t data_len,
                                                            uint8_t queue_depth);
 
+
 /**
  * @brief 向topic发布一条消息。
  *
@@ -140,6 +145,7 @@ MessageCenterSubscriber_t* MessageCenterRegisterSubscriber(MessageCenterTopic_e 
  */
 uint8_t MessageCenterPublish(MessageCenterPublisher_t* publisher, const void* data);
 
+
 /**
  * @brief 从订阅者Queue读取一条消息。
  *
@@ -151,6 +157,7 @@ uint8_t MessageCenterPublish(MessageCenterPublisher_t* publisher, const void* da
  */
 uint8_t MessageCenterFetch(MessageCenterSubscriber_t* subscriber, void* data);
 
+
 /**
  * @brief 获取订阅者Queue中等待读取的消息数量。
  *
@@ -158,6 +165,7 @@ uint8_t MessageCenterFetch(MessageCenterSubscriber_t* subscriber, void* data);
  * @return 等待读取的消息数量；参数非法时返回0。
  */
 uint8_t MessageCenterPendingCount(const MessageCenterSubscriber_t* subscriber);
+
 
 /**
  * @brief 获取订阅者因为Queue满而丢弃的旧消息数量。

@@ -1,6 +1,7 @@
 # bsp_iic
 
-`bsp_iic` 是 I2C/IIC 总线型外设 BSP。它以“一个 IICInstance 对应一个 I2C 从设备”的方式封装总线互斥、阻塞/IT/DMA 传输、寄存器访问和 DMA 内存域适配。
+`bsp_iic` 是 I2C/IIC 总线型外设 BSP。它以“一个 IICInstance 对应一个 I2C 从设备”的方式封装总线互斥、阻塞/IT/DMA 传输、寄存器访问和
+DMA 内存域适配。
 
 ## 注册
 
@@ -16,7 +17,8 @@ IIC_Init_Config_s conf = {
 IICInstance *iic = IICRegister(&conf);
 ```
 
-`dev_address` 使用 7 位地址,不需要提前左移。注册阶段只登记总线资源,RTOS mutex/semaphore 由 `BSPTaskInit()` 中的 `IICBusOsInit()` 统一创建。
+`dev_address` 使用 7 位地址,不需要提前左移。注册阶段只登记总线资源,RTOS mutex/semaphore 由 `BSPTaskInit()` 中的
+`IICBusOsInit()` 统一创建。
 
 ## 工作模式
 
@@ -39,7 +41,8 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
 
 ## 序列传输
 
-`IIC_SEQ_HOLDON` 用于连续多段 I2C 事务期间保持 BSP 总线 mutex,只支持 IT/DMA 模式。每个 HOLDON 序列必须以 `IIC_SEQ_RELEASE` 结束,否则同一条 I2C 总线会一直被当前实例占用。
+`IIC_SEQ_HOLDON` 用于连续多段 I2C 事务期间保持 BSP 总线 mutex,只支持 IT/DMA 模式。每个 HOLDON 序列必须以
+`IIC_SEQ_RELEASE` 结束,否则同一条 I2C 总线会一直被当前实例占用。
 
 阻塞模式不支持 HOLDON。
 
@@ -47,7 +50,8 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
 
 STM32H7 的 DMA1/DMA2 不能访问 DTCM。`bsp_iic` 为每条 I2C 总线准备位于 `.dma_buffer` / `RAM_D2` 的中转缓冲区。上层可以传入普通栈、全局或堆内存。
 
-若开启 D-Cache,BSP 会在 DMA 发送前 clean TX 缓冲,在 DMA 接收前后 invalidate RX 缓冲。若 `.dma_buffer` 后续被 MPU 配置为 non-cacheable,可将 `IIC_USE_DMA_CACHE_MAINTENANCE` 设为 `0U`。
+若开启 D-Cache,BSP 会在 DMA 发送前 clean TX 缓冲,在 DMA 接收前后 invalidate RX 缓冲。若 `.dma_buffer` 后续被 MPU 配置为
+non-cacheable,可将 `IIC_USE_DMA_CACHE_MAINTENANCE` 设为 `0U`。
 
 ## 回调语义
 

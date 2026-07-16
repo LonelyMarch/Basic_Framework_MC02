@@ -18,11 +18,11 @@
 static HTMMotorInstance htm_motor_pool[HTM_MOTOR_TOTAL_CNT];
 static uint8_t htm_motor_count;
 
-extern HAL_StatusTypeDef HTMRS485RegisterMotor(HTMRS485Bus *bus, HTMMotorInstance *motor);
+extern HAL_StatusTypeDef HTMRS485RegisterMotor(HTMRS485Bus * bus, HTMMotorInstance * motor);
 
-static void HTMMotorLostCallback(void *owner)
+static void HTMMotorLostCallback(void* owner)
 {
-    HTMMotorInstance *motor = (HTMMotorInstance *)owner;
+    HTMMotorInstance* motor = (HTMMotorInstance*)owner;
 
     if (motor == NULL)
         return;
@@ -36,10 +36,10 @@ static void HTMMotorLostCallback(void *owner)
     }
 }
 
-static HAL_StatusTypeDef HTMMotorQueueCommand(HTMMotorInstance *motor,
-                                               uint8_t command,
-                                               const uint8_t *data,
-                                               uint8_t data_len)
+static HAL_StatusTypeDef HTMMotorQueueCommand(HTMMotorInstance* motor,
+                                              uint8_t command,
+                                              const uint8_t* data,
+                                              uint8_t data_len)
 {
     if (motor == NULL || data_len > sizeof(motor->pending_data))
         return HAL_ERROR;
@@ -54,9 +54,9 @@ static HAL_StatusTypeDef HTMMotorQueueCommand(HTMMotorInstance *motor,
     return HAL_OK;
 }
 
-HTMMotorInstance *HTMMotorInit(const HTMMotor_Init_Config_s *config)
+HTMMotorInstance* HTMMotorInit(const HTMMotor_Init_Config_s* config)
 {
-    HTMMotorInstance *motor;
+    HTMMotorInstance* motor;
     Daemon_Init_Config_s daemon_config;
 
     if (config == NULL || config->bus == NULL || config->device_address < 1U ||
@@ -90,7 +90,7 @@ HTMMotorInstance *HTMMotorInit(const HTMMotor_Init_Config_s *config)
     return motor;
 }
 
-HAL_StatusTypeDef HTMMotorEnable(HTMMotorInstance *motor)
+HAL_StatusTypeDef HTMMotorEnable(HTMMotorInstance* motor)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -100,7 +100,7 @@ HAL_StatusTypeDef HTMMotorEnable(HTMMotorInstance *motor)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef HTMMotorStop(HTMMotorInstance *motor)
+HAL_StatusTypeDef HTMMotorStop(HTMMotorInstance* motor)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -112,7 +112,7 @@ HAL_StatusTypeDef HTMMotorStop(HTMMotorInstance *motor)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef HTMMotorSetOpenLoop(HTMMotorInstance *motor, int16_t power)
+HAL_StatusTypeDef HTMMotorSetOpenLoop(HTMMotorInstance* motor, int16_t power)
 {
     uint8_t data[2];
 
@@ -121,13 +121,13 @@ HAL_StatusTypeDef HTMMotorSetOpenLoop(HTMMotorInstance *motor, int16_t power)
     if (motor->enabled == 0U || motor->offline != 0U)
         return HAL_BUSY;
     if (motor->motor_reverse_flag == MOTOR_DIRECTION_REVERSE)
-        power = (power == INT16_MIN) ? INT16_MAX : (int16_t)-power;
+        power = (power == INT16_MIN) ? INT16_MAX : (int16_t) - power;
     data[0] = (uint8_t)power;
     data[1] = (uint8_t)((uint16_t)power >> 8U);
     return HTMMotorQueueCommand(motor, HTM_CMD_OPEN_LOOP, data, 2U);
 }
 
-HAL_StatusTypeDef HTMMotorSetSpeed(HTMMotorInstance *motor, float speed_rpm)
+HAL_StatusTypeDef HTMMotorSetSpeed(HTMMotorInstance* motor, float speed_rpm)
 {
     int32_t raw;
     uint8_t data[2];
@@ -152,7 +152,7 @@ HAL_StatusTypeDef HTMMotorSetSpeed(HTMMotorInstance *motor, float speed_rpm)
     return HTMMotorQueueCommand(motor, HTM_CMD_SPEED, data, 2U);
 }
 
-HAL_StatusTypeDef HTMMotorSetAbsolutePosition(HTMMotorInstance *motor, float position_deg)
+HAL_StatusTypeDef HTMMotorSetAbsolutePosition(HTMMotorInstance* motor, float position_deg)
 {
     int64_t signed_count;
     uint32_t count;
@@ -180,7 +180,7 @@ HAL_StatusTypeDef HTMMotorSetAbsolutePosition(HTMMotorInstance *motor, float pos
     return HTMMotorQueueCommand(motor, HTM_CMD_ABSOLUTE_POSITION, data, 4U);
 }
 
-HAL_StatusTypeDef HTMMotorSetRelativePosition(HTMMotorInstance *motor, float delta_deg)
+HAL_StatusTypeDef HTMMotorSetRelativePosition(HTMMotorInstance* motor, float delta_deg)
 {
     int32_t count;
     uint8_t data[2];
@@ -202,7 +202,7 @@ HAL_StatusTypeDef HTMMotorSetRelativePosition(HTMMotorInstance *motor, float del
     return HTMMotorQueueCommand(motor, HTM_CMD_RELATIVE_POSITION, data, 2U);
 }
 
-HAL_StatusTypeDef HTMMotorSetCurrentPositionAsZero(HTMMotorInstance *motor)
+HAL_StatusTypeDef HTMMotorSetCurrentPositionAsZero(HTMMotorInstance* motor)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -210,17 +210,17 @@ HAL_StatusTypeDef HTMMotorSetCurrentPositionAsZero(HTMMotorInstance *motor)
     return HTMMotorQueueCommand(motor, HTM_CMD_SET_ZERO, NULL, 0U);
 }
 
-HAL_StatusTypeDef HTMMotorClearFault(HTMMotorInstance *motor)
+HAL_StatusTypeDef HTMMotorClearFault(HTMMotorInstance* motor)
 {
     return HTMMotorQueueCommand(motor, HTM_CMD_CLEAR_FAULT, NULL, 0U);
 }
 
-uint8_t HTMMotorIsOnline(const HTMMotorInstance *motor)
+uint8_t HTMMotorIsOnline(const HTMMotorInstance* motor)
 {
     return motor != NULL && motor->offline == 0U;
 }
 
-HTMMotor_Control_Mode_e HTMMotorGetControlMode(const HTMMotorInstance *motor)
+HTMMotor_Control_Mode_e HTMMotorGetControlMode(const HTMMotorInstance* motor)
 {
     return motor != NULL ? motor->control_mode : HTM_CONTROL_OPEN_LOOP;
 }

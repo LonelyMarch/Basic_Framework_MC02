@@ -28,7 +28,7 @@ typedef struct
 } HTMotorPoolEntry;
 
 static HTMotorPoolEntry ht_motor_pool[HT04_MOTOR_CNT];
-static HTMotorInstance *ht_motor_instances[HT04_MOTOR_CNT];
+static HTMotorInstance* ht_motor_instances[HT04_MOTOR_CNT];
 static uint8_t ht_motor_count;
 
 static uint16_t HTMotorFloatToUint(float value, float min_value, float max_value, uint8_t bits)
@@ -65,7 +65,7 @@ static void HTMotorPackTorqueFrame(uint8_t frame[8], float torque_nm)
     frame[7] = (uint8_t)torque;
 }
 
-static HAL_StatusTypeDef HTMotorSendSpecialCommand(HTMotorInstance *motor, uint8_t command)
+static HAL_StatusTypeDef HTMotorSendSpecialCommand(HTMotorInstance* motor, uint8_t command)
 {
     if (motor == NULL || motor->motor_can_instance == NULL)
         return HAL_ERROR;
@@ -75,11 +75,11 @@ static HAL_StatusTypeDef HTMotorSendSpecialCommand(HTMotorInstance *motor, uint8
     return CANTransmit(motor->motor_can_instance, 1.0f) != 0U ? HAL_OK : HAL_ERROR;
 }
 
-static void HTMotorDecode(CANInstance *motor_can)
+static void HTMotorDecode(CANInstance* motor_can)
 {
-    HTMotorInstance *motor;
-    HTMotor_Measure_t *measure;
-    HTMotorPoolEntry *entry;
+    HTMotorInstance* motor;
+    HTMotor_Measure_t* measure;
+    HTMotorPoolEntry* entry;
     uint16_t raw_position;
     uint16_t raw_velocity;
     uint16_t raw_current;
@@ -88,7 +88,7 @@ static void HTMotorDecode(CANInstance *motor_can)
     if (motor_can == NULL || motor_can->id == NULL || motor_can->rx_len != 6U)
         return;
 
-    motor = (HTMotorInstance *)motor_can->id;
+    motor = (HTMotorInstance*)motor_can->id;
     if (motor->expected_motor_id != 0U && motor_can->rx_buff[0] != motor->expected_motor_id)
         return;
 
@@ -96,30 +96,30 @@ static void HTMotorDecode(CANInstance *motor_can)
         direction = -1.0f;
 
     measure = &motor->measure;
-    entry = (HTMotorPoolEntry *)motor;
+    entry = (HTMotorPoolEntry*)motor;
     raw_position = (uint16_t)(((uint16_t)motor_can->rx_buff[1] << 8U) | motor_can->rx_buff[2]);
     raw_velocity = (uint16_t)(((uint16_t)motor_can->rx_buff[3] << 4U) | (motor_can->rx_buff[4] >> 4U));
     raw_current = (uint16_t)((((uint16_t)motor_can->rx_buff[4] & 0x0FU) << 8U) | motor_can->rx_buff[5]);
 
     measure->last_position_rad = measure->position_rad;
     measure->position_rad = direction * HTMotorUintToFloat(raw_position,
-                                                            HT04_POSITION_MIN_RAD,
-                                                            HT04_POSITION_MAX_RAD,
-                                                            16U);
+                                                           HT04_POSITION_MIN_RAD,
+                                                           HT04_POSITION_MAX_RAD,
+                                                           16U);
     measure->velocity_rad_s = AverageFilter(direction *
-                                                (HTMotorUintToFloat(raw_velocity,
-                                                                    HT04_VELOCITY_MIN_RAD_S,
-                                                                    HT04_VELOCITY_MAX_RAD_S,
-                                                                    12U) -
-                                                 HT04_SPEED_BIAS_RAD_S),
+                                            (HTMotorUintToFloat(raw_velocity,
+                                                                HT04_VELOCITY_MIN_RAD_S,
+                                                                HT04_VELOCITY_MAX_RAD_S,
+                                                                12U) -
+                                                HT04_SPEED_BIAS_RAD_S),
                                             entry->speed_buffer,
                                             HT04_SPEED_BUFFER_SIZE);
     measure->phase_current_a = HT04_CURRENT_SMOOTH_COEF * direction *
-                                   HTMotorUintToFloat(raw_current,
-                                                      HT04_CURRENT_MIN_A,
-                                                      HT04_CURRENT_MAX_A,
-                                                      12U) +
-                               (1.0f - HT04_CURRENT_SMOOTH_COEF) * measure->phase_current_a;
+        HTMotorUintToFloat(raw_current,
+                           HT04_CURRENT_MIN_A,
+                           HT04_CURRENT_MAX_A,
+                           12U) +
+        (1.0f - HT04_CURRENT_SMOOTH_COEF) * measure->phase_current_a;
     measure->motor_id = motor_can->rx_buff[0];
     measure->feed_dt = DWT_GetDeltaT(&measure->feed_cnt);
 
@@ -132,9 +132,9 @@ static void HTMotorDecode(CANInstance *motor_can)
     DaemonReload(motor->motor_daemon);
 }
 
-static void HTMotorLostCallback(void *motor_ptr)
+static void HTMotorLostCallback(void* motor_ptr)
 {
-    HTMotorInstance *motor = (HTMotorInstance *)motor_ptr;
+    HTMotorInstance* motor = (HTMotorInstance*)motor_ptr;
 
     if (motor == NULL)
         return;
@@ -150,10 +150,10 @@ static void HTMotorLostCallback(void *motor_ptr)
     }
 }
 
-HTMotorInstance *HTMotorInit(const HTMotor_Init_Config_s *config)
+HTMotorInstance* HTMotorInit(const HTMotor_Init_Config_s* config)
 {
-    HTMotorPoolEntry *entry;
-    HTMotorInstance *motor;
+    HTMotorPoolEntry* entry;
+    HTMotorInstance* motor;
     CAN_Init_Config_s can_config;
     Daemon_Init_Config_s daemon_config;
 
@@ -196,7 +196,7 @@ HTMotorInstance *HTMotorInit(const HTMotor_Init_Config_s *config)
     return motor;
 }
 
-HAL_StatusTypeDef HTMotorSetTorque(HTMotorInstance *motor, float torque_nm)
+HAL_StatusTypeDef HTMotorSetTorque(HTMotorInstance* motor, float torque_nm)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -208,7 +208,7 @@ HAL_StatusTypeDef HTMotorSetTorque(HTMotorInstance *motor, float torque_nm)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef HTMotorStop(HTMotorInstance *motor)
+HAL_StatusTypeDef HTMotorStop(HTMotorInstance* motor)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -217,7 +217,7 @@ HAL_StatusTypeDef HTMotorStop(HTMotorInstance *motor)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef HTMotorEnable(HTMotorInstance *motor)
+HAL_StatusTypeDef HTMotorEnable(HTMotorInstance* motor)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -230,7 +230,7 @@ HAL_StatusTypeDef HTMotorEnable(HTMotorInstance *motor)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef HTMotorDisable(HTMotorInstance *motor)
+HAL_StatusTypeDef HTMotorDisable(HTMotorInstance* motor)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -244,7 +244,7 @@ HAL_StatusTypeDef HTMotorDisable(HTMotorInstance *motor)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef HTMotorSetCurrentPositionAsZero(HTMotorInstance *motor)
+HAL_StatusTypeDef HTMotorSetCurrentPositionAsZero(HTMotorInstance* motor)
 {
     if (motor == NULL)
         return HAL_ERROR;
@@ -263,7 +263,7 @@ void HTMotorControl(void)
 {
     for (uint8_t i = 0U; i < ht_motor_count; ++i)
     {
-        HTMotorInstance *motor = ht_motor_instances[i];
+        HTMotorInstance* motor = ht_motor_instances[i];
         float torque_nm;
 
         if (motor == NULL || motor->motor_can_instance == NULL || motor->enabled == 0U)
@@ -278,12 +278,12 @@ void HTMotorControl(void)
     }
 }
 
-uint8_t HTMotorIsOnline(const HTMotorInstance *motor)
+uint8_t HTMotorIsOnline(const HTMotorInstance* motor)
 {
     return motor != NULL && motor->offline == 0U;
 }
 
-uint8_t HTMotorIsEnabled(const HTMotorInstance *motor)
+uint8_t HTMotorIsEnabled(const HTMotorInstance* motor)
 {
     return motor != NULL && motor->enabled != 0U;
 }

@@ -44,7 +44,7 @@ static uint64_t DWT_GetCYCCNT64(void)
 /**
  * @brief 根据64位DWT计数值计算系统时间
  */
-static void DWT_CalcSysTime(DWT_Time_t *sys_time)
+static void DWT_CalcSysTime(DWT_Time_t* sys_time)
 {
     uint64_t cyccnt64 = DWT_GetCYCCNT64();
     uint64_t cnt_temp1, cnt_temp2, cnt_temp3;
@@ -110,7 +110,7 @@ void DWT_Init(uint32_t CPU_Freq_mHz)
     (void)DWT_GetCYCCNT64();
 }
 
-float DWT_GetDeltaT(uint32_t *cnt_last)
+float DWT_GetDeltaT(uint32_t* cnt_last)
 {
     uint32_t cnt_now = (uint32_t)DWT_GetCYCCNT64();
     float dt = ((uint32_t)(cnt_now - *cnt_last)) / ((float)(CPU_FREQ_Hz));
@@ -119,7 +119,7 @@ float DWT_GetDeltaT(uint32_t *cnt_last)
     return dt;
 }
 
-double DWT_GetDeltaT64(uint32_t *cnt_last)
+double DWT_GetDeltaT64(uint32_t* cnt_last)
 {
     uint32_t cnt_now = (uint32_t)DWT_GetCYCCNT64();
     double dt = ((uint32_t)(cnt_now - *cnt_last)) / ((double)(CPU_FREQ_Hz));

@@ -433,7 +433,7 @@ void DJIMotorSetCurrentRaw(DJIMotorInstance* motor, int16_t current_raw)
     }
 
     limit = DJIGetCommandLimit(motor->protocol_mode);
-    motor->command_raw = DJIClampI16(current_raw, (int16_t)-limit, limit);
+    motor->command_raw = DJIClampI16(current_raw, (int16_t) - limit, limit);
 }
 
 void DJIMotorSetVoltageRaw(DJIMotorInstance* motor, int16_t voltage_raw)
@@ -565,15 +565,16 @@ void DJIMotorControl(void)
             }
 
             command = DJIClampI16((int32_t)output,
-                                  (int16_t)-DJIGetCommandLimit(motor->protocol_mode),
+                                  (int16_t) - DJIGetCommandLimit(motor->protocol_mode),
                                   DJIGetCommandLimit(motor->protocol_mode));
         }
 
-dji_pack_command:
+    dji_pack_command:
         if (motor->motor_reverse_flag == MOTOR_DIRECTION_REVERSE)
             command = -command;
 
-        command_u16 = (uint16_t)(int16_t)command;
+        command_u16 = (uint16_t)(int16_t)
+        command;
         offset = (uint8_t)(motor->message_num * 2U);
         motor->sender_can_instance->tx_buff[offset] = (uint8_t)(command_u16 >> 8);
         motor->sender_can_instance->tx_buff[offset + 1U] = (uint8_t)command_u16;

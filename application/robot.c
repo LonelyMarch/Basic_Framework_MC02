@@ -31,7 +31,7 @@ void RobotInit(void)
     // 初始化期间关闭全局中断，避免尚未完成注册的外设提前进入回调路径。
     __disable_irq();
 
-    BSPInit();           // 初始化 DWT、日志、BSP 服务和片内 Flash 等基础资源。
+    BSPInit(); // 初始化 DWT、日志、BSP 服务和片内 Flash 等基础资源。
     MessageCenterInit(); // 建立消息中心注册表，为后续迁入的新 APP 预留通信基础设施。
 
     // 以下初始化函数当前均为空壳；迁移业务时在对应 APP 内注册模块实例和消息 topic。
@@ -56,7 +56,7 @@ void RobotInit(void)
  */
 void RobotOSTaskInit(void)
 {
-    BSPTaskInit();   // 必须在 osKernelInitialize() 之后、osKernelStart() 之前调用。
+    BSPTaskInit(); // 必须在 osKernelInitialize() 之后、osKernelStart() 之前调用。
     RobotTaskInit(); // 创建电机管理、daemon 和 APP 控制任务。
 }
 
@@ -69,7 +69,7 @@ void RobotOSTaskInit(void)
 void RobotTask(void)
 {
     RobotCMDTask(); // 读取输入并生成控制目标；当前为空实现。
-    GimbalTask();   // 消费云台目标并设置执行器；当前为空实现。
-    ChassisTask();  // 消费底盘目标并设置执行器；当前为空实现。
-    ShootTask();    // 消费发射目标并设置执行器；当前为空实现。
+    GimbalTask(); // 消费云台目标并设置执行器；当前为空实现。
+    ChassisTask(); // 消费底盘目标并设置执行器；当前为空实现。
+    ShootTask(); // 消费发射目标并设置执行器；当前为空实现。
 }

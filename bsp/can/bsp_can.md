@@ -24,13 +24,15 @@ CAN_Init_Config_s conf = {
 CANInstance *can = CANRegister(&conf);
 ```
 
-每个 `CANInstance` 保存发送 ID、接收 ID、8 字节发送缓存、8 字节接收缓存和模块回调。模块发送前先写 `instance->tx_buff`,再调用 `CANTransmit()`。
+每个 `CANInstance` 保存发送 ID、接收 ID、8 字节发送缓存、8 字节接收缓存和模块回调。模块发送前先写 `instance->tx_buff`,再调用
+`CANTransmit()`。
 
 ## 过滤器与FIFO
 
 注册时 BSP 会根据 `rx_id` 为对应 FDCAN 配置标准 ID 过滤器。当前支持三路 FDCAN,每路维护独立的实例列表和过滤器索引。
 
-CubeMX 中每路 `StdFiltersNbr` 必须不小于该路注册实例数量。若使用两个接收 FIFO,需要在 CubeMX 中同时给 FIFO0/FIFO1 分配元素,并开启对应中断。
+CubeMX 中每路 `StdFiltersNbr` 必须不小于该路注册实例数量。若使用两个接收 FIFO,需要在 CubeMX 中同时给 FIFO0/FIFO1
+分配元素,并开启对应中断。
 
 ## 接收流程
 
@@ -52,7 +54,8 @@ can->tx_buff[0] = value;
 CANTransmit(can, 1.0f);
 ```
 
-`CANTransmit()` 会先获取对应 FDCAN 总线的发送互斥锁,再等待 Tx FIFO Queue 有空位。若 FreeRTOS 已运行且超时时间达到毫秒级,等待过程中会 `osDelay(1)` 主动让出 CPU;亚毫秒等待仍使用 DWT 短忙等。
+`CANTransmit()` 会先获取对应 FDCAN 总线的发送互斥锁,再等待 Tx FIFO Queue 有空位。若 FreeRTOS 已运行且超时时间达到毫秒级,等待过程中会
+`osDelay(1)` 主动让出 CPU;亚毫秒等待仍使用 DWT 短忙等。
 
 `timeout` 单位为 ms,不应大于调用任务自身周期。
 

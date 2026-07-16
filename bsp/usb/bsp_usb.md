@@ -22,11 +22,13 @@ USBTransmit(data, len);
 USBPrintf("ch0:%d,ch1:%d\r\n", ch0, ch1);
 ```
 
-USB CDC 发送是异步完成。BSP 会先把上层数据复制到内部发送缓冲区,因此调用者可以传入局部数组。上一帧未发送完成时返回 `USBD_BUSY`。
+USB CDC 发送是异步完成。BSP 会先把上层数据复制到内部发送缓冲区,因此调用者可以传入局部数组。上一帧未发送完成时返回
+`USBD_BUSY`。
 
 ## 接收
 
-USB CDC 底层接收完成后由 `usbd_cdc_if.c` 调用 `USB_CDC_RxCpltCallback()`。该函数只把数据复制进 `BSPFrameQueue` 管理的接收帧缓存,然后唤醒 `BSPServiceTask`。
+USB CDC 底层接收完成后由 `usbd_cdc_if.c` 调用 `USB_CDC_RxCpltCallback()`。该函数只把数据复制进 `BSPFrameQueue`
+管理的接收帧缓存,然后唤醒 `BSPServiceTask`。
 
 真正的 `rx_callback` 由 `USBProcess()` 在任务上下文调用。
 

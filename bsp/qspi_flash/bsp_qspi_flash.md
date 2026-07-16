@@ -36,7 +36,8 @@ int8_t BSP_QSPI_Flash_ChipErase(void);
 
 写入前必须先擦除目标区域。`BSP_QSPI_Flash_Write()` 会自动按页拆分,但不会替你擦除。
 
-`BSP_QSPI_Flash_EraseRange()` 要求起始地址和长度都按 4 KiB 对齐,内部会优先使用 64 KiB / 32 KiB 块擦除,剩余部分使用 4 KiB 扇区擦除。
+`BSP_QSPI_Flash_EraseRange()` 要求起始地址和长度都按 4 KiB 对齐,内部会优先使用 64 KiB / 32 KiB 块擦除,剩余部分使用 4 KiB
+扇区擦除。
 
 ## 内存映射
 

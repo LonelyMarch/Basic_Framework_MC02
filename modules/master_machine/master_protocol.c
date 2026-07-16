@@ -4,9 +4,30 @@
 #include <string.h>
 
 /* 编译期锁定线上结构体尺寸，避免字段或对齐方式被无意修改。 */
-_Static_assert(sizeof(MasterCommandPayload) == 23U, "MasterCommandPayload size must be 23 bytes");
-_Static_assert(sizeof(MasterVisionPayload) == 125U, "MasterVisionPayload size must be 125 bytes");
-_Static_assert(sizeof(MasterEventPayload) == 15U, "MasterEventPayload size must be 15 bytes");
+_Static_assert (
+sizeof
+(MasterCommandPayload)
+==
+23U
+,
+"MasterCommandPayload size must be 23 bytes"
+);
+_Static_assert (
+sizeof
+(MasterVisionPayload)
+==
+125U
+,
+"MasterVisionPayload size must be 125 bytes"
+);
+_Static_assert (
+sizeof
+(MasterEventPayload)
+==
+15U
+,
+"MasterEventPayload size must be 15 bytes"
+);
 
 /**
  * @brief 判断一个单精度浮点数是否可用于控制或计算。
@@ -25,7 +46,7 @@ static uint8_t MasterProtocolFloatIsFinite(float value)
  * @param vision 已按协议布局复制出的视觉payload。
  * @return uint8_t 全部为有限值返回1，否则返回0。
  */
-static uint8_t MasterProtocolValidateVisionFloats(const MasterVisionPayload *vision)
+static uint8_t MasterProtocolValidateVisionFloats(const MasterVisionPayload* vision)
 {
     uint8_t index;
 
@@ -76,7 +97,7 @@ uint16_t MasterProtocolGetPayloadSize(uint8_t type)
  */
 uint8_t MasterProtocolCalculateChecksum(uint8_t type,
                                         uint16_t payload_length,
-                                        const uint8_t *payload)
+                                        const uint8_t* payload)
 {
     uint8_t checksum;
     uint16_t index;
@@ -104,7 +125,7 @@ uint8_t MasterProtocolCalculateChecksum(uint8_t type,
  * @param payload 已确认长度正确的payload字节。
  * @return MasterProtocolPayloadStatus_e 校验结果。
  */
-static MasterProtocolPayloadStatus_e MasterProtocolValidateCommand(const uint8_t *payload)
+static MasterProtocolPayloadStatus_e MasterProtocolValidateCommand(const uint8_t* payload)
 {
     MasterCommandPayload command;
 
@@ -129,7 +150,7 @@ static MasterProtocolPayloadStatus_e MasterProtocolValidateCommand(const uint8_t
  * @param payload 已确认长度正确的payload字节。
  * @return MasterProtocolPayloadStatus_e 校验结果。
  */
-static MasterProtocolPayloadStatus_e MasterProtocolValidateVision(const uint8_t *payload)
+static MasterProtocolPayloadStatus_e MasterProtocolValidateVision(const uint8_t* payload)
 {
     MasterVisionPayload vision;
     uint8_t index;
@@ -164,7 +185,7 @@ static MasterProtocolPayloadStatus_e MasterProtocolValidateVision(const uint8_t 
  * @param payload 已确认长度正确的payload字节。
  * @return MasterProtocolPayloadStatus_e 校验结果。
  */
-static MasterProtocolPayloadStatus_e MasterProtocolValidateEvent(const uint8_t *payload)
+static MasterProtocolPayloadStatus_e MasterProtocolValidateEvent(const uint8_t* payload)
 {
     MasterEventPayload event_payload;
 
@@ -185,7 +206,7 @@ static MasterProtocolPayloadStatus_e MasterProtocolValidateEvent(const uint8_t *
  * @brief 校验payload的类型、长度和字段取值。
  */
 MasterProtocolPayloadStatus_e MasterProtocolValidatePayload(uint8_t type,
-                                                            const uint8_t *payload,
+                                                            const uint8_t* payload,
                                                             uint16_t payload_length)
 {
     uint16_t expected_length;

@@ -476,7 +476,6 @@ void INS_Task(void)
             INS.attitude.Pitch = QEKF_INS.Pitch;
             INS.attitude.Roll = QEKF_INS.Roll;
             INS.attitude.YawTotalAngle = QEKF_INS.YawTotalAngle;
-
         }
     }
 
