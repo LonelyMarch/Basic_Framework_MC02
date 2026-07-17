@@ -1,16 +1,20 @@
+/**
+ * @file chassis.h
+ * @brief 底盘 APP 空框架。
+ */
+
 #ifndef CHASSIS_H
 #define CHASSIS_H
 
 /**
- * @brief 底盘应用初始化,请在开启rtos之前调用(目前会被RobotInit()调用)
- * 
+ * @brief 初始化底盘使用的消息、传感器引用和执行器实例。
  */
-void ChassisInit();
+void ChassisInit(void);
+
 
 /**
- * @brief 底盘应用任务,放入实时系统以一定频率运行
- * 
+ * @brief 执行一次底盘状态机、运动学与目标更新。
  */
-void ChassisTask();
+void ChassisTask(void);
 
 #endif // CHASSIS_H

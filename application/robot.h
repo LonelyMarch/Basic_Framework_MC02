@@ -1,24 +1,32 @@
+/**
+ * @file robot.h
+ * @brief APP 层最小启动入口。
+ */
+
 #ifndef ROBOT_H
 #define ROBOT_H
 
-/* Robot利用robot_def.h中的宏对不同的机器人进行了大量的兼容,同时兼容了两个开发板(云台板和底盘板)的配置 */
-
 /**
- * @brief 机器人硬件和模块初始化,请在开启RTOS调度器之前调用。
- * 
+ * @brief 初始化调度器启动前必须存在的框架资源。
+ *
+ * @note 当前不初始化任何具体机器人业务；后续 APP 迁移以该函数作为模块注册入口。
  */
 void RobotInit(void);
 
+
 /**
- * @brief 创建机器人和BSP相关RTOS任务,必须在osKernelInitialize()之后、osKernelStart()之前调用。
+ * @brief 创建 BSP 运行期资源和后台任务。
  *
+ * @note 必须在 osKernelInitialize() 之后、osKernelStart() 之前调用。
  */
 void RobotOSTaskInit(void);
 
+
 /**
- * @brief 机器人任务,放入实时系统以一定频率运行,内部会调用各个应用的任务
- * 
+ * @brief 执行一次 APP 层控制调度。
+ *
+ * @note 由 APP 控制任务周期调用，迁移业务时保持命令生成先于执行 APP 更新。
  */
 void RobotTask(void);
 
-#endif
+#endif // ROBOT_H

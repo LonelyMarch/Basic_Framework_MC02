@@ -1,5 +1,11 @@
 build/
+build-*/
 cmake-build-*/
+CMakeUserPresets.json
 .idea/
 .vscode/
-CMakeUserPresets.json
+.assets/
+.agents/
+.claude/
+.codex_tmp/
+tmp/

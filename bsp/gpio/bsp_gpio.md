@@ -31,7 +31,8 @@ GPIO_PinState GPIORead(GPIOInstance *instance);
 
 ## EXTI流程
 
-HAL 的 `HAL_GPIO_EXTI_Callback()` 只有 `GPIO_Pin` 参数,没有 `GPIOx`。在 STM32 EXTI 映射中,同一条 EXTI 线只能连接一个端口的同号引脚,因此只要 CubeMX 配置不冲突,即可通过 `GPIO_Pin` 定位注册实例。
+HAL 的 `HAL_GPIO_EXTI_Callback()` 只有 `GPIO_Pin` 参数,没有 `GPIOx`。在 STM32 EXTI 映射中,同一条 EXTI 线只能连接一个端口的同号引脚,因此只要
+CubeMX 配置不冲突,即可通过 `GPIO_Pin` 定位注册实例。
 
 当前流程为:
 

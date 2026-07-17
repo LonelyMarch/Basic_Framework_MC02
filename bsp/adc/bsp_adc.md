@@ -1,6 +1,7 @@
 # bsp_adc
 
-`bsp_adc` 是 ADC DMA 循环采样的最小 BSP 封装。CubeMX 负责 ADC、GPIO、DMA 的底层初始化,BSP 负责注册实例、启动/停止 DMA、读取原始值和换算电压。
+`bsp_adc` 是 ADC DMA 循环采样的最小 BSP 封装。CubeMX 负责 ADC、GPIO、DMA 的底层初始化,BSP 负责注册实例、启动/停止
+DMA、读取原始值和换算电压。
 
 ## 职责边界
 
@@ -21,13 +22,15 @@ ADCInstance *adc = ADCRegister(&adc_conf);
 ADCStart(adc);
 ```
 
-`channel_count` 必须和 CubeMX 中 ADC regular conversion 数量一致。读取时的 `channel_index` 从 0 开始,对应 CubeMX 的 regular rank 顺序。
+`channel_count` 必须和 CubeMX 中 ADC regular conversion 数量一致。读取时的 `channel_index` 从 0 开始,对应 CubeMX 的
+regular rank 顺序。
 
 ## DMA缓冲区
 
 STM32H7 的 DMA1/DMA2 不能访问 DTCM。ADC DMA 循环缓冲区由 BSP 内部提供,位于 `.dma_buffer` / `RAM_D2`。
 
-若开启 D-Cache,BSP 在启动和读取时会对 DMA 缓冲区做 cache 维护。若后续通过 MPU 将 `.dma_buffer` 配置为 non-cacheable,可将 `BSP_ADC_USE_DMA_CACHE_MAINTENANCE` 设为 `0U`。
+若开启 D-Cache,BSP 在启动和读取时会对 DMA 缓冲区做 cache 维护。若后续通过 MPU 将 `.dma_buffer` 配置为 non-cacheable,可将
+`BSP_ADC_USE_DMA_CACHE_MAINTENANCE` 设为 `0U`。
 
 ## 接口
 
@@ -46,7 +49,8 @@ uint32_t ADCGetLastError(ADCInstance *instance);
 
 ## FreeRTOS约束
 
-ADC DMA 启动后硬件持续更新内部缓冲区,上层任务可以周期读取。HAL ADC 完成回调只递增 `update_count`,错误回调只记录 `error_count` 和 `last_error`。
+ADC DMA 启动后硬件持续更新内部缓冲区,上层任务可以周期读取。HAL ADC 完成回调只递增 `update_count`,错误回调只记录
+`error_count` 和 `last_error`。
 
 ## 注意事项
 

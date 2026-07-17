@@ -15,23 +15,23 @@
 /* pwm实例结构体 */
 typedef struct pwm_ins_temp
 {
-    TIM_HandleTypeDef *htim;                 // TIM句柄
-    uint32_t channel;                        // 通道
-    uint32_t tclk;                           // 定时器输入时钟频率,由BSP根据TIM所在APB域计算
-    float period;                            // PWM周期,单位s
-    float dutyratio;                         // 占空比,范围0~1
-    void (*callback)(struct pwm_ins_temp *); // DMA传输完成回调函数
-    void *id;                                // 实例ID
+    TIM_HandleTypeDef* htim; // TIM句柄
+    uint32_t channel; // 通道
+    uint32_t tclk; // 定时器输入时钟频率,由BSP根据TIM所在APB域计算
+    float period; // PWM周期,单位s
+    float dutyratio; // 占空比,范围0~1
+    void (*callback)(struct pwm_ins_temp*); // DMA传输完成回调函数
+    void* id; // 实例ID
 } PWMInstance;
 
 typedef struct
 {
-    TIM_HandleTypeDef *htim;                 // TIM句柄
-    uint32_t channel;                        // 通道
-    float period;                            // PWM周期,单位s
-    float dutyratio;                         // 占空比,范围0~1
-    void (*callback)(PWMInstance*);          // DMA传输完成回调函数
-    void *id;                                // 实例ID
+    TIM_HandleTypeDef* htim; // TIM句柄
+    uint32_t channel; // 通道
+    float period; // PWM周期,单位s
+    float dutyratio; // 占空比,范围0~1
+    void (*callback)(PWMInstance*); // DMA传输完成回调函数
+    void* id; // 实例ID
 } PWM_Init_Config_s;
 
 /**
@@ -40,14 +40,17 @@ typedef struct
  * @param config 初始化配置
  * @return PWMInstance*
  */
-PWMInstance *PWMRegister(PWM_Init_Config_s *config);
+PWMInstance* PWMRegister(PWM_Init_Config_s* config);
+
 
 /**
  * @brief 启动pwm
  *
  * @param pwm pwm实例
  */
-void PWMStart(PWMInstance *pwm);
+void PWMStart(PWMInstance* pwm);
+
+
 /**
  * @brief 设置pwm占空比
  *
@@ -55,13 +58,16 @@ void PWMStart(PWMInstance *pwm);
  * @param dutyratio 占空比 0~1
  */
 
-void PWMSetDutyRatio(PWMInstance *pwm, float dutyratio);
+void PWMSetDutyRatio(PWMInstance* pwm, float dutyratio);
+
+
 /**
  * @brief 停止pwm
  *
  * @param pwm pwm实例
  */
-void PWMStop(PWMInstance *pwm);
+void PWMStop(PWMInstance* pwm);
+
 
 /**
  * @brief 设置pwm周期
@@ -69,7 +75,8 @@ void PWMStop(PWMInstance *pwm);
  * @param pwm pwm实例
  * @param period 周期 单位 s
  */
-void PWMSetPeriod(PWMInstance *pwm, float period);
+void PWMSetPeriod(PWMInstance* pwm, float period);
+
 
 /**
  * @brief 启动pwm dma传输
@@ -80,6 +87,6 @@ void PWMSetPeriod(PWMInstance *pwm, float period);
  * @note 如果使用此函数,则需要在CubeMX中配置DMA传输位数为对应位数
  *       例如:使用16位数据,则需要配置DMA传输位数为16位(half word),配置错误会导致指针越界或数据错误
  */
-void PWMStartDMA(PWMInstance *pwm, uint32_t *pData, uint32_t Size);
+void PWMStartDMA(PWMInstance* pwm, uint32_t* pData, uint32_t Size);
 
 #endif // BSP_PWM_H

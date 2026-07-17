@@ -7,18 +7,18 @@
 #include "main.h"
 #include "memory.h"
 
-static uint8_t BSPFrameQueueIsValid(const BSPFrameQueue *queue)
+static uint8_t BSPFrameQueueIsValid(const BSPFrameQueue* queue)
 {
     return (queue != NULL &&
-            queue->buffer != NULL &&
-            queue->len_table != NULL &&
-            queue->frame_count > 0U &&
-            queue->frame_size > 0U);
+        queue->buffer != NULL &&
+        queue->len_table != NULL &&
+        queue->frame_count > 0U &&
+        queue->frame_size > 0U);
 }
 
-void BSPFrameQueueInit(BSPFrameQueue *queue,
-                       uint8_t *buffer,
-                       uint16_t *len_table,
+void BSPFrameQueueInit(BSPFrameQueue* queue,
+                       uint8_t* buffer,
+                       uint16_t* len_table,
                        uint8_t frame_count,
                        uint16_t frame_size)
 {
@@ -48,7 +48,7 @@ void BSPFrameQueueInit(BSPFrameQueue *queue,
     }
 }
 
-uint8_t BSPFrameQueuePush(BSPFrameQueue *queue, const uint8_t *data, uint16_t len)
+uint8_t BSPFrameQueuePush(BSPFrameQueue* queue, const uint8_t* data, uint16_t len)
 {
     uint8_t write_idx;
     uint16_t copy_len;
@@ -94,7 +94,7 @@ uint8_t BSPFrameQueuePush(BSPFrameQueue *queue, const uint8_t *data, uint16_t le
     return 1U;
 }
 
-uint8_t BSPFrameQueuePeek(BSPFrameQueue *queue, uint8_t **data, uint16_t *len)
+uint8_t BSPFrameQueuePeek(BSPFrameQueue* queue, uint8_t** data, uint16_t* len)
 {
     uint8_t read_idx;
     uint32_t primask;
@@ -124,7 +124,7 @@ uint8_t BSPFrameQueuePeek(BSPFrameQueue *queue, uint8_t **data, uint16_t *len)
     return 1U;
 }
 
-void BSPFrameQueuePop(BSPFrameQueue *queue)
+void BSPFrameQueuePop(BSPFrameQueue* queue)
 {
     uint32_t primask;
 
@@ -147,7 +147,7 @@ void BSPFrameQueuePop(BSPFrameQueue *queue)
     __set_PRIMASK(primask);
 }
 
-uint8_t BSPFrameQueuePendingCount(const BSPFrameQueue *queue)
+uint8_t BSPFrameQueuePendingCount(const BSPFrameQueue* queue)
 {
     if (!BSPFrameQueueIsValid(queue))
     {
@@ -157,7 +157,7 @@ uint8_t BSPFrameQueuePendingCount(const BSPFrameQueue *queue)
     return queue->pending_cnt;
 }
 
-uint32_t BSPFrameQueueDroppedCount(const BSPFrameQueue *queue)
+uint32_t BSPFrameQueueDroppedCount(const BSPFrameQueue* queue)
 {
     if (!BSPFrameQueueIsValid(queue))
     {

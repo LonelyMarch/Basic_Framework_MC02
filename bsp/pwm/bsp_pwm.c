@@ -5,16 +5,25 @@
 // 注册表会被PWM DMA完成回调读取,发布实例时需要避免回调看到半初始化对象。
 static uint8_t idx;
 static PWMInstance pwm_instance_pool[PWM_DEVICE_CNT]; // PWM实例静态池,控制结构体放默认.bss/DTCM
-static PWMInstance *pwm_instance[PWM_DEVICE_CNT] = {NULL}; // 已发布的PWM实例指针表,用于回调查找中断来源
-static uint8_t PWMIsAPB1Timer(TIM_TypeDef *tim);
-static uint8_t PWMIsAPB2Timer(TIM_TypeDef *tim);
-static uint8_t PWMIs32BitTimer(TIM_TypeDef *tim);
-static uint32_t PWMGetTimerClock(uint32_t pclk, uint32_t apb_prescaler);
-static uint32_t PWMSelectTclk(TIM_HandleTypeDef *htim);
-static PWMInstance *PWMReserveInstance(uint8_t *slot);
-static void PWMPublishInstance(uint8_t slot, PWMInstance *pwm);
+static PWMInstance* pwm_instance[PWM_DEVICE_CNT] = {NULL}; // 已发布的PWM实例指针表,用于回调查找中断来源
+static uint8_t PWMIsAPB1Timer(TIM_TypeDef * tim);
+static uint8_t PWMIsAPB2Timer(TIM_TypeDef * tim);
+static uint8_t PWMIs32BitTimer(TIM_TypeDef * tim);
 
-__attribute__((noreturn)) static void PWMFatalError(void)
+
+static uint32_t PWMGetTimerClock(uint32_t pclk, uint32_t apb_prescaler);
+
+
+static uint32_t PWMSelectTclk(TIM_HandleTypeDef * htim);
+static PWMInstance* PWMReserveInstance(uint8_t * slot);
+
+
+static void PWMPublishInstance(uint8_t slot, PWMInstance* pwm);
+
+
+__attribute__ ((noreturn))
+
+static void PWMFatalError(void)
 {
     Error_Handler();
     __builtin_unreachable();
@@ -25,7 +34,7 @@ __attribute__((noreturn)) static void PWMFatalError(void)
  *
  * @param htim 发生中断的定时器句柄
  */
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef* htim)
 {
     for (uint8_t i = 0; i < idx; i++)
     {
@@ -41,7 +50,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
-PWMInstance *PWMRegister(PWM_Init_Config_s *config)
+PWMInstance* PWMRegister(PWM_Init_Config_s* config)
 {
     if (config == NULL || config->htim == NULL)
     {
@@ -51,7 +60,7 @@ PWMInstance *PWMRegister(PWM_Init_Config_s *config)
     }
 
     uint8_t slot;
-    PWMInstance *pwm = PWMReserveInstance(&slot);
+    PWMInstance* pwm = PWMReserveInstance(&slot);
     if (pwm == NULL)
     {
         LOGERROR("[bsp_pwm] pwm instance count exceeds limit");
@@ -91,7 +100,7 @@ PWMInstance *PWMRegister(PWM_Init_Config_s *config)
 }
 
 /* 启动已注册PWM通道。保留该接口便于模块在运行期重新打开输出。 */
-void PWMStart(PWMInstance *pwm)
+void PWMStart(PWMInstance* pwm)
 {
     if (pwm == NULL || pwm->htim == NULL)
     {
@@ -107,7 +116,7 @@ void PWMStart(PWMInstance *pwm)
 }
 
 /* 停止已注册PWM通道。停止后实例参数仍保留,后续可再次PWMStart()。 */
-void PWMStop(PWMInstance *pwm)
+void PWMStop(PWMInstance* pwm)
 {
     if (pwm == NULL || pwm->htim == NULL)
     {
@@ -128,7 +137,7 @@ void PWMStop(PWMInstance *pwm)
  * @param pwm pwm实例
  * @param period 周期 单位 s
  */
-void PWMSetPeriod(PWMInstance *pwm, float period)
+void PWMSetPeriod(PWMInstance* pwm, float period)
 {
     if (pwm == NULL || pwm->htim == NULL)
     {
@@ -181,13 +190,14 @@ void PWMSetPeriod(PWMInstance *pwm, float period)
     uint32_t ticks = (uint32_t)(ticks_float + 0.5f);
     __HAL_TIM_SetAutoreload(pwm->htim, ticks - 1U);
 }
+
 /*
     * @brief 设置pwm占空比
     *
     * @param pwm pwm实例
     * @param dutyratio 占空比 0~1
 */
-void PWMSetDutyRatio(PWMInstance *pwm, float dutyratio)
+void PWMSetDutyRatio(PWMInstance* pwm, float dutyratio)
 {
     if (pwm == NULL || pwm->htim == NULL)
     {
@@ -216,7 +226,7 @@ void PWMSetDutyRatio(PWMInstance *pwm, float dutyratio)
 }
 
 /* 启动PWM DMA输出,常用于需要连续更新CCR的波形输出场景。 */
-void PWMStartDMA(PWMInstance *pwm, uint32_t *pData, uint32_t Size)
+void PWMStartDMA(PWMInstance* pwm, uint32_t* pData, uint32_t Size)
 {
     if (pwm == NULL || pwm->htim == NULL)
     {
@@ -238,7 +248,7 @@ void PWMStartDMA(PWMInstance *pwm, uint32_t *pData, uint32_t Size)
 }
 
 // 判断定时器是否挂载在 APB1 定时器时钟域
-static uint8_t PWMIsAPB1Timer(TIM_TypeDef *tim)
+static uint8_t PWMIsAPB1Timer(TIM_TypeDef* tim)
 {
     return 0
 #ifdef TIM2
@@ -268,11 +278,11 @@ static uint8_t PWMIsAPB1Timer(TIM_TypeDef *tim)
 #ifdef TIM24
            || (tim == TIM24)
 #endif
-           ;
+        ;
 }
 
 // 判断定时器是否挂载在 APB2 定时器时钟域
-static uint8_t PWMIsAPB2Timer(TIM_TypeDef *tim)
+static uint8_t PWMIsAPB2Timer(TIM_TypeDef* tim)
 {
     return 0
 #ifdef TIM1
@@ -290,11 +300,11 @@ static uint8_t PWMIsAPB2Timer(TIM_TypeDef *tim)
 #ifdef TIM17
            || (tim == TIM17)
 #endif
-           ;
+        ;
 }
 
 // 判断定时器是否为32位计数器,其余普通PWM定时器按16位ARR处理
-static uint8_t PWMIs32BitTimer(TIM_TypeDef *tim)
+static uint8_t PWMIs32BitTimer(TIM_TypeDef* tim)
 {
     return 0
 #ifdef TIM2
@@ -309,7 +319,7 @@ static uint8_t PWMIs32BitTimer(TIM_TypeDef *tim)
 #ifdef TIM24
            || (tim == TIM24)
 #endif
-           ;
+        ;
 }
 
 // 根据 STM32H7 的 TIMPRE 规则计算定时器实际输入时钟
@@ -346,7 +356,7 @@ static uint32_t PWMGetTimerClock(uint32_t pclk, uint32_t apb_prescaler)
 }
 
 // 设置pwm对应定时器时钟源频率
-static uint32_t PWMSelectTclk(TIM_HandleTypeDef *htim)
+static uint32_t PWMSelectTclk(TIM_HandleTypeDef* htim)
 {
     if (htim == NULL)
     {
@@ -367,10 +377,10 @@ static uint32_t PWMSelectTclk(TIM_HandleTypeDef *htim)
 }
 
 // 从静态池中预留一个实例槽位。先增加idx但暂不发布指针,中断回调会跳过NULL槽位。
-static PWMInstance *PWMReserveInstance(uint8_t *slot)
+static PWMInstance* PWMReserveInstance(uint8_t* slot)
 {
     uint32_t primask = __get_PRIMASK();
-    PWMInstance *pwm = NULL;
+    PWMInstance* pwm = NULL;
 
     __disable_irq();
     if (idx < PWM_DEVICE_CNT)
@@ -386,7 +396,7 @@ static PWMInstance *PWMReserveInstance(uint8_t *slot)
 }
 
 // 初始化完成后再发布实例指针,避免回调读到半初始化对象。
-static void PWMPublishInstance(uint8_t slot, PWMInstance *pwm)
+static void PWMPublishInstance(uint8_t slot, PWMInstance* pwm)
 {
     uint32_t primask = __get_PRIMASK();
 

@@ -18,10 +18,10 @@ typedef enum
 
 typedef struct
 {
-    BSP_FlashAsyncJobType type;                 // 任务类型
-    uint32_t address;                           // 片上Flash偏移或QSPI内部地址
-    uint32_t size;                              // 擦除/写入长度
-    uint8_t data[BSP_FLASH_ASYNC_DATA_SIZE];    // 写任务的数据副本
+    BSP_FlashAsyncJobType type; // 任务类型
+    uint32_t address; // 片上Flash偏移或QSPI内部地址
+    uint32_t size; // 擦除/写入长度
+    uint8_t data[BSP_FLASH_ASYNC_DATA_SIZE]; // 写任务的数据副本
 } BSP_FlashAsyncJob;
 
 static StaticQueue_t flash_async_queue_cb;
@@ -73,7 +73,7 @@ static QueueHandle_t BSP_FlashAsyncGetQueue(void)
     return flash_async_queue;
 }
 
-static int8_t BSP_FlashAsyncPush(BSP_FlashAsyncJob const *job)
+static int8_t BSP_FlashAsyncPush(BSP_FlashAsyncJob const* job)
 {
     QueueHandle_t queue = BSP_FlashAsyncGetQueue();
     int8_t status = BSP_FLASH_ASYNC_ERROR_QUEUE_FULL;
@@ -106,7 +106,7 @@ static int8_t BSP_FlashAsyncPush(BSP_FlashAsyncJob const *job)
     return status;
 }
 
-static int8_t BSP_FlashAsyncExecute(BSP_FlashAsyncJob const *job)
+static int8_t BSP_FlashAsyncExecute(BSP_FlashAsyncJob const* job)
 {
     if (job == NULL)
     {
@@ -128,7 +128,7 @@ static int8_t BSP_FlashAsyncExecute(BSP_FlashAsyncJob const *job)
     }
 }
 
-static int8_t BSP_FlashAsyncPostWrite(BSP_FlashAsyncJobType type, uint32_t address, const void *data, uint32_t size)
+static int8_t BSP_FlashAsyncPostWrite(BSP_FlashAsyncJobType type, uint32_t address, const void* data, uint32_t size)
 {
     BSP_FlashAsyncJob job;
 
@@ -178,7 +178,7 @@ int8_t BSP_FlashAsyncPostOnchipErase(uint32_t offset, uint32_t size)
     return BSP_FlashAsyncPostErase(BSP_FLASH_ASYNC_JOB_ONCHIP_ERASE, offset, size);
 }
 
-int8_t BSP_FlashAsyncPostOnchipWrite(uint32_t offset, const void *data, uint32_t size)
+int8_t BSP_FlashAsyncPostOnchipWrite(uint32_t offset, const void* data, uint32_t size)
 {
     return BSP_FlashAsyncPostWrite(BSP_FLASH_ASYNC_JOB_ONCHIP_WRITE, offset, data, size);
 }
@@ -188,7 +188,7 @@ int8_t BSP_FlashAsyncPostQspiErase(uint32_t addr, uint32_t size)
     return BSP_FlashAsyncPostErase(BSP_FLASH_ASYNC_JOB_QSPI_ERASE, addr, size);
 }
 
-int8_t BSP_FlashAsyncPostQspiWrite(uint32_t addr, const void *data, uint32_t size)
+int8_t BSP_FlashAsyncPostQspiWrite(uint32_t addr, const void* data, uint32_t size)
 {
     return BSP_FlashAsyncPostWrite(BSP_FLASH_ASYNC_JOB_QSPI_WRITE, addr, data, size);
 }
@@ -232,7 +232,9 @@ int8_t BSP_FlashAsyncGetLastStatus(void)
     return flash_async_last_status;
 }
 
-__attribute__((noreturn)) void BSP_FlashAsyncTask(void *argument)
+__attribute__ ((noreturn))
+
+void BSP_FlashAsyncTask(void* argument)
 {
     BSP_FlashAsyncJob job;
     int8_t status;

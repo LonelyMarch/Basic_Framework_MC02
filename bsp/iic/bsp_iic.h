@@ -20,16 +20,15 @@ typedef enum
 {
     // 基本工作模式
     IIC_BLOCK_MODE = 0, // 阻塞模式
-    IIC_IT_MODE,        // 中断模式
-    IIC_DMA_MODE,       // DMA模式
-
+    IIC_IT_MODE, // 中断模式
+    IIC_DMA_MODE, // DMA模式
 } IIC_Work_Mode_e;
 
 /* I2C MEM工作模式枚举,这两种方法都是阻塞 */
 typedef enum
 {
     IIC_READ_MEM = 0, // 读取从机内部的寄存器or内存
-    IIC_WRITE_MEM,    // 写入从机内部的寄存器or内存
+    IIC_WRITE_MEM, // 写入从机内部的寄存器or内存
 } IIC_Mem_Mode_e;
 
 /* 序列传输模式枚举。HOLDON只适用于IT/DMA模式,用于连续多段事务期间保持总线互斥锁。 */
@@ -37,31 +36,31 @@ typedef enum
 typedef enum
 {
     IIC_SEQ_RELEASE = 0, // 完成传输后释放总线占有权,这是默认的传输方式
-    IIC_SEQ_HOLDON = 1,  // 保持BSP总线互斥锁不释放,只支持IT和DMA模式
+    IIC_SEQ_HOLDON = 1, // 保持BSP总线互斥锁不释放,只支持IT和DMA模式
 } IIC_Seq_Mode_e;
 
 /* I2C从设备实例 */
 typedef struct iic_temp_s
 {
-    I2C_HandleTypeDef *handle; // I2C硬件句柄
-    uint8_t dev_address;       // 暂时只支持7位地址(还有一位是读写位)
+    I2C_HandleTypeDef* handle; // I2C硬件句柄
+    uint8_t dev_address; // 暂时只支持7位地址(还有一位是读写位)
 
-    IIC_Work_Mode_e work_mode;             // 工作模式
-    uint8_t *rx_buffer;                    // 接收缓冲区指针
-    uint16_t rx_len;                       // 接收长度,与HAL I2C的Size参数保持一致
-    void (*callback)(struct iic_temp_s *); // 接收完成后的回调函数,由调用者任务上下文触发
+    IIC_Work_Mode_e work_mode; // 工作模式
+    uint8_t* rx_buffer; // 接收缓冲区指针
+    uint16_t rx_len; // 接收长度,与HAL I2C的Size参数保持一致
+    void (*callback)(struct iic_temp_s*); // 接收完成后的回调函数,由调用者任务上下文触发
 
-    void *id; // 用于标识I2C instance
+    void* id; // 用于标识I2C instance
 } IICInstance;
 
 /* I2C 初始化结构体配置 */
 typedef struct
 {
-    I2C_HandleTypeDef *handle;       // I2C硬件句柄
-    uint8_t dev_address;             // 暂时只支持7位地址(还有一位是读写位),注意不需要左移
-    IIC_Work_Mode_e work_mode;       // 工作模式
-    void (*callback)(IICInstance *); // 接收完成后的回调函数,由调用者任务上下文触发
-    void *id;                        // 用于标识I2C instance
+    I2C_HandleTypeDef* handle; // I2C硬件句柄
+    uint8_t dev_address; // 暂时只支持7位地址(还有一位是读写位),注意不需要左移
+    IIC_Work_Mode_e work_mode; // 工作模式
+    void (*callback)(IICInstance*); // 接收完成后的回调函数,由调用者任务上下文触发
+    void* id; // 用于标识I2C instance
 } IIC_Init_Config_s;
 
 /**
@@ -70,7 +69,8 @@ typedef struct
  * @param conf 初始化配置
  * @return IICInstance*
  */
-IICInstance *IICRegister(IIC_Init_Config_s *conf);
+IICInstance* IICRegister(IIC_Init_Config_s* conf);
+
 
 /**
  * @brief 为已经注册的I2C硬件总线创建RTOS互斥锁和完成信号量。
@@ -78,6 +78,7 @@ IICInstance *IICRegister(IIC_Init_Config_s *conf);
  * @note 由BSPTaskInit()在osKernelInitialize()之后、任务启动前统一调用。
  */
 HAL_StatusTypeDef IICBusOsInit(void);
+
 
 /**
  * @brief IIC发送数据
@@ -91,7 +92,8 @@ HAL_StatusTypeDef IICBusOsInit(void);
  * @note IIC_DMA_MODE下,BSP会自动使用RAM_D2内部中转缓冲区,上层data可以位于普通栈/全局/堆内存
  *
  */
-HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, IIC_Seq_Mode_e mode);
+HAL_StatusTypeDef IICTransmit(IICInstance* iic, uint8_t* data, uint16_t size, IIC_Seq_Mode_e mode);
+
 
 /**
  * @brief IIC接收数据
@@ -105,7 +107,8 @@ HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, II
  *       那么该结构体在声明时务必使用#pragma pack(1)进行对齐,并在声明结束后使用#pragma pack()恢复对齐
  * @note IIC_DMA_MODE下,BSP会自动使用RAM_D2内部中转缓冲区,上层data可以位于普通栈/全局/堆内存
  */
-HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC_Seq_Mode_e mode);
+HAL_StatusTypeDef IICReceive(IICInstance* iic, uint8_t* data, uint16_t size, IIC_Seq_Mode_e mode);
+
 
 /**
  * @brief IIC访问从机寄存器(内存)
@@ -119,6 +122,7 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
  * @return HAL_StatusTypeDef HAL_OK表示访问完成,其他值表示失败或超时
  * @note IIC_DMA_MODE下,BSP会自动使用RAM_D2内部中转缓冲区,上层data可以位于普通栈/全局/堆内存
  */
-HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *data, uint16_t size, IIC_Mem_Mode_e mode, uint8_t mem8bit_flag);
+HAL_StatusTypeDef IICAccessMem(IICInstance* iic, uint16_t mem_addr, uint8_t* data, uint16_t size, IIC_Mem_Mode_e mode,
+                               uint8_t mem8bit_flag);
 
 #endif // BSP_IIC_H

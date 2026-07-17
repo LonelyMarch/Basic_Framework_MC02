@@ -54,12 +54,14 @@
  */
 int8_t BSP_QSPI_Flash_Init(void);
 
+
 /**
  * @brief 读取W25Q64的JEDEC ID
  *
  * @retval 24位JEDEC ID,正常W25Q64应为0xEF4017
  */
 uint32_t BSP_QSPI_Flash_ReadID(void);
+
 
 /**
  * @brief 读取外部Flash数据
@@ -69,7 +71,8 @@ uint32_t BSP_QSPI_Flash_ReadID(void);
  * @param size 读取字节数
  * @retval BSP_QSPI_FLASH_OK 读取成功
  */
-int8_t BSP_QSPI_Flash_Read(uint32_t read_addr, uint8_t *buffer, uint32_t size);
+int8_t BSP_QSPI_Flash_Read(uint32_t read_addr, uint8_t* buffer, uint32_t size);
+
 
 /**
  * @brief 写入外部Flash数据,函数内部会按256字节页自动拆分
@@ -81,7 +84,8 @@ int8_t BSP_QSPI_Flash_Read(uint32_t read_addr, uint8_t *buffer, uint32_t size);
  * @param size 写入字节数
  * @retval BSP_QSPI_FLASH_OK 写入成功
  */
-int8_t BSP_QSPI_Flash_Write(uint32_t write_addr, const uint8_t *buffer, uint32_t size);
+int8_t BSP_QSPI_Flash_Write(uint32_t write_addr, const uint8_t* buffer, uint32_t size);
+
 
 /**
  * @brief 写入单页数据,最多写入256字节,且不能跨页
@@ -91,7 +95,8 @@ int8_t BSP_QSPI_Flash_Write(uint32_t write_addr, const uint8_t *buffer, uint32_t
  * @param size 写入字节数,最大为256
  * @retval BSP_QSPI_FLASH_OK 写入成功
  */
-int8_t BSP_QSPI_Flash_WritePage(uint32_t write_addr, const uint8_t *buffer, uint16_t size);
+int8_t BSP_QSPI_Flash_WritePage(uint32_t write_addr, const uint8_t* buffer, uint16_t size);
+
 
 /**
  * @brief 擦除一个4KB扇区
@@ -101,6 +106,7 @@ int8_t BSP_QSPI_Flash_WritePage(uint32_t write_addr, const uint8_t *buffer, uint
  */
 int8_t BSP_QSPI_Flash_EraseSector(uint32_t sector_addr);
 
+
 /**
  * @brief 擦除一个32KB块
  *
@@ -109,6 +115,7 @@ int8_t BSP_QSPI_Flash_EraseSector(uint32_t sector_addr);
  */
 int8_t BSP_QSPI_Flash_EraseBlock32K(uint32_t block_addr);
 
+
 /**
  * @brief 擦除一个64KB块
  *
@@ -116,6 +123,7 @@ int8_t BSP_QSPI_Flash_EraseBlock32K(uint32_t block_addr);
  * @retval BSP_QSPI_FLASH_OK 擦除成功
  */
 int8_t BSP_QSPI_Flash_EraseBlock64K(uint32_t block_addr);
+
 
 /**
  * @brief 擦除一段Flash区域,函数内部会优先使用64KB/32KB块擦除,剩余部分使用4KB扇区擦除
@@ -128,6 +136,7 @@ int8_t BSP_QSPI_Flash_EraseBlock64K(uint32_t block_addr);
  */
 int8_t BSP_QSPI_Flash_EraseRange(uint32_t erase_addr, uint32_t size);
 
+
 /**
  * @brief 擦除整片W25Q64
  *
@@ -137,6 +146,7 @@ int8_t BSP_QSPI_Flash_EraseRange(uint32_t erase_addr, uint32_t size);
  */
 int8_t BSP_QSPI_Flash_ChipErase(void);
 
+
 /**
  * @brief 进入OSPI内存映射模式,之后可以从0x90000000地址直接读取外部Flash
  *
@@ -145,6 +155,7 @@ int8_t BSP_QSPI_Flash_ChipErase(void);
  * @retval BSP_QSPI_FLASH_OK 配置成功
  */
 int8_t BSP_QSPI_Flash_MemoryMappedMode(void);
+
 
 /**
  * @brief 退出OSPI内存映射模式

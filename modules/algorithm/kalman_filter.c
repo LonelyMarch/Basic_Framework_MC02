@@ -25,11 +25,11 @@
  * and initialize z H R in the normal way as matrix P.
  *
  * 要求量测向量z与控制向量u在传感器回调函数中更新。整数0意味着量测无效，即自上次卡尔曼
- * 滤波更新后无传感器数据更新。因此量测向量z与控制向量u会在卡尔曼滤波更新过程中被清零
+ * 滤波更新后无传感器数据更新。因此量测向量z会在卡尔曼滤波更新过程中被清零
  * MeasuredVector and ControlVector are required to be updated in the sensor
  * callback function. Integer 0 in measurement vector z indicates the invalidity
- * of current measurement, so MeasuredVector and ControlVector will be reset
- * (to 0) during each update.
+ * of current measurement, so MeasuredVector will be reset (to 0) during each
+ * update.
  *
  * 此外，矩阵P过度收敛后滤波器将难以再适应状态的缓慢变化，从而产生滤波估计偏差。该算法
  * 通过限制矩阵P最小值的方法，可有效抑制滤波器的过度收敛，详情请见例程。
@@ -127,10 +127,21 @@
  */
 
 #include "kalman_filter.h"
+#include <string.h>
 
-uint16_t sizeof_float, sizeof_double;
+uint16_t sizeof_float = sizeof(float);
+uint16_t sizeof_double = sizeof(double);
 
-static void H_K_R_Adjustment(KalmanFilter_t *kf);
+static void H_K_R_Adjustment(KalmanFilter_t * kf);
+
+
+static void* KalmanAllocZero(KalmanFilter_t* kf, size_t size);
+
+
+static void KalmanSetError(KalmanFilter_t* kf, KalmanFilterError_e error);
+
+
+static void KalmanUsePredictionOnly(KalmanFilter_t * kf);
 
 /**
  * @brief 初始化矩阵维度信息并为矩阵分配空间
@@ -140,129 +151,175 @@ static void H_K_R_Adjustment(KalmanFilter_t *kf);
  * @param uSize 控制变量维度
  * @param zSize 观测量维度
  */
-void Kalman_Filter_Init(KalmanFilter_t *kf, uint8_t xhatSize, uint8_t uSize, uint8_t zSize)
+void Kalman_Filter_Init(KalmanFilter_t* kf, uint8_t xhatSize, uint8_t uSize, uint8_t zSize)
 {
-    sizeof_float = sizeof(float);
-    sizeof_double = sizeof(double);
+    if (kf == NULL)
+    {
+        return;
+    }
+
+    uint8_t use_auto_adjustment = (kf->UseAutoAdjustment == 1U) ? 1U : 0U;
+
+    kf->Initialized = 0;
+    kf->ErrorCode = KALMAN_FILTER_OK;
+    kf->MatStatus = ARM_MATH_SUCCESS;
+
+    if (xhatSize == 0U || zSize == 0U)
+    {
+        kf->xhatSize = xhatSize;
+        kf->uSize = uSize;
+        kf->zSize = zSize;
+        KalmanSetError(kf, KALMAN_FILTER_ERROR_INVALID_SIZE);
+        return;
+    }
+
+    uint8_t max_matrix_size = (xhatSize > zSize) ? xhatSize : zSize;
 
     kf->xhatSize = xhatSize;
     kf->uSize = uSize;
     kf->zSize = zSize;
 
     kf->MeasurementValidNum = 0;
+    kf->UseAutoAdjustment = use_auto_adjustment;
+    kf->FilteredValue = NULL;
+    kf->MeasuredVector = NULL;
+    kf->ControlVector = NULL;
+    kf->MeasurementMap = NULL;
+    kf->MeasurementDegree = NULL;
+    kf->MatR_DiagonalElements = NULL;
+    kf->StateMinVariance = NULL;
+    kf->temp = NULL;
+    kf->xhat_data = NULL;
+    kf->xhatminus_data = NULL;
+    kf->u_data = NULL;
+    kf->z_data = NULL;
+    kf->P_data = NULL;
+    kf->Pminus_data = NULL;
+    kf->F_data = NULL;
+    kf->FT_data = NULL;
+    kf->B_data = NULL;
+    kf->H_data = NULL;
+    kf->HT_data = NULL;
+    kf->Q_data = NULL;
+    kf->R_data = NULL;
+    kf->K_data = NULL;
+    kf->S_data = NULL;
+    kf->temp_matrix_data = NULL;
+    kf->temp_matrix_data1 = NULL;
+    kf->temp_vector_data = NULL;
+    kf->temp_vector_data1 = NULL;
+    kf->User_Func0_f = NULL;
+    kf->User_Func1_f = NULL;
+    kf->User_Func2_f = NULL;
+    kf->User_Func3_f = NULL;
+    kf->User_Func4_f = NULL;
+    kf->User_Func5_f = NULL;
+    kf->User_Func6_f = NULL;
 
     // measurement flags
-    kf->MeasurementMap = (uint8_t *)user_malloc(sizeof(uint8_t) * zSize);
-    memset(kf->MeasurementMap, 0, sizeof(uint8_t) * zSize);
-    kf->MeasurementDegree = (float *)user_malloc(sizeof_float * zSize);
-    memset(kf->MeasurementDegree, 0, sizeof_float * zSize);
-    kf->MatR_DiagonalElements = (float *)user_malloc(sizeof_float * zSize);
-    memset(kf->MatR_DiagonalElements, 0, sizeof_float * zSize);
-    kf->StateMinVariance = (float *)user_malloc(sizeof_float * xhatSize);
-    memset(kf->StateMinVariance, 0, sizeof_float * xhatSize);
-    kf->temp = (uint8_t *)user_malloc(sizeof(uint8_t) * zSize);
-    memset(kf->temp, 0, sizeof(uint8_t) * zSize);
+    kf->MeasurementMap = (uint8_t*)KalmanAllocZero(kf, sizeof(uint8_t) * zSize);
+    kf->MeasurementDegree = (float*)KalmanAllocZero(kf, sizeof_float * zSize);
+    kf->MatR_DiagonalElements = (float*)KalmanAllocZero(kf, sizeof_float * zSize);
+    kf->StateMinVariance = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize);
+    kf->temp = (uint8_t*)KalmanAllocZero(kf, sizeof(uint8_t) * zSize);
 
     // filter data
-    kf->FilteredValue = (float *)user_malloc(sizeof_float * xhatSize);
-    memset(kf->FilteredValue, 0, sizeof_float * xhatSize);
-    kf->MeasuredVector = (float *)user_malloc(sizeof_float * zSize);
-    memset(kf->MeasuredVector, 0, sizeof_float * zSize);
-    kf->ControlVector = (float *)user_malloc(sizeof_float * uSize);
-    memset(kf->ControlVector, 0, sizeof_float * uSize);
+    kf->FilteredValue = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize);
+    kf->MeasuredVector = (float*)KalmanAllocZero(kf, sizeof_float * zSize);
+    if (uSize != 0U)
+    {
+        kf->ControlVector = (float*)KalmanAllocZero(kf, sizeof_float * uSize);
+    }
 
     // xhat x(k|k)
-    kf->xhat_data = (float *)user_malloc(sizeof_float * xhatSize);
-    memset(kf->xhat_data, 0, sizeof_float * xhatSize);
-    Matrix_Init(&kf->xhat, kf->xhatSize, 1, (float *)kf->xhat_data);
+    kf->xhat_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize);
+    Matrix_Init(&kf->xhat, kf->xhatSize, 1, (float*)kf->xhat_data);
 
     // xhatminus x(k|k-1)
-    kf->xhatminus_data = (float *)user_malloc(sizeof_float * xhatSize);
-    memset(kf->xhatminus_data, 0, sizeof_float * xhatSize);
-    Matrix_Init(&kf->xhatminus, kf->xhatSize, 1, (float *)kf->xhatminus_data);
+    kf->xhatminus_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize);
+    Matrix_Init(&kf->xhatminus, kf->xhatSize, 1, (float*)kf->xhatminus_data);
 
-    if (uSize != 0)
+    if (uSize != 0U)
     {
         // control vector u
-        kf->u_data = (float *)user_malloc(sizeof_float * uSize);
-        memset(kf->u_data, 0, sizeof_float * uSize);
-        Matrix_Init(&kf->u, kf->uSize, 1, (float *)kf->u_data);
+        kf->u_data = (float*)KalmanAllocZero(kf, sizeof_float * uSize);
+        Matrix_Init(&kf->u, kf->uSize, 1, (float*)kf->u_data);
     }
 
     // measurement vector z
-    kf->z_data = (float *)user_malloc(sizeof_float * zSize);
-    memset(kf->z_data, 0, sizeof_float * zSize);
-    Matrix_Init(&kf->z, kf->zSize, 1, (float *)kf->z_data);
+    kf->z_data = (float*)KalmanAllocZero(kf, sizeof_float * zSize);
+    Matrix_Init(&kf->z, kf->zSize, 1, (float*)kf->z_data);
 
     // covariance matrix P(k|k)
-    kf->P_data = (float *)user_malloc(sizeof_float * xhatSize * xhatSize);
-    memset(kf->P_data, 0, sizeof_float * xhatSize * xhatSize);
-    Matrix_Init(&kf->P, kf->xhatSize, kf->xhatSize, (float *)kf->P_data);
+    kf->P_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * xhatSize);
+    Matrix_Init(&kf->P, kf->xhatSize, kf->xhatSize, (float*)kf->P_data);
 
     // create covariance matrix P(k|k-1)
-    kf->Pminus_data = (float *)user_malloc(sizeof_float * xhatSize * xhatSize);
-    memset(kf->Pminus_data, 0, sizeof_float * xhatSize * xhatSize);
-    Matrix_Init(&kf->Pminus, kf->xhatSize, kf->xhatSize, (float *)kf->Pminus_data);
+    kf->Pminus_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * xhatSize);
+    Matrix_Init(&kf->Pminus, kf->xhatSize, kf->xhatSize, (float*)kf->Pminus_data);
 
     // state transition matrix F FT
-    kf->F_data = (float *)user_malloc(sizeof_float * xhatSize * xhatSize);
-    kf->FT_data = (float *)user_malloc(sizeof_float * xhatSize * xhatSize);
-    memset(kf->F_data, 0, sizeof_float * xhatSize * xhatSize);
-    memset(kf->FT_data, 0, sizeof_float * xhatSize * xhatSize);
-    Matrix_Init(&kf->F, kf->xhatSize, kf->xhatSize, (float *)kf->F_data);
-    Matrix_Init(&kf->FT, kf->xhatSize, kf->xhatSize, (float *)kf->FT_data);
+    kf->F_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * xhatSize);
+    kf->FT_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * xhatSize);
+    Matrix_Init(&kf->F, kf->xhatSize, kf->xhatSize, (float*)kf->F_data);
+    Matrix_Init(&kf->FT, kf->xhatSize, kf->xhatSize, (float*)kf->FT_data);
 
-    if (uSize != 0)
+    if (uSize != 0U)
     {
         // control matrix B
-        kf->B_data = (float *)user_malloc(sizeof_float * xhatSize * uSize);
-        memset(kf->B_data, 0, sizeof_float * xhatSize * uSize);
-        Matrix_Init(&kf->B, kf->xhatSize, kf->uSize, (float *)kf->B_data);
+        kf->B_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * uSize);
+        Matrix_Init(&kf->B, kf->xhatSize, kf->uSize, (float*)kf->B_data);
     }
 
     // measurement matrix H
-    kf->H_data = (float *)user_malloc(sizeof_float * zSize * xhatSize);
-    kf->HT_data = (float *)user_malloc(sizeof_float * xhatSize * zSize);
-    memset(kf->H_data, 0, sizeof_float * zSize * xhatSize);
-    memset(kf->HT_data, 0, sizeof_float * xhatSize * zSize);
-    Matrix_Init(&kf->H, kf->zSize, kf->xhatSize, (float *)kf->H_data);
-    Matrix_Init(&kf->HT, kf->xhatSize, kf->zSize, (float *)kf->HT_data);
+    kf->H_data = (float*)KalmanAllocZero(kf, sizeof_float * zSize * xhatSize);
+    kf->HT_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * zSize);
+    Matrix_Init(&kf->H, kf->zSize, kf->xhatSize, (float*)kf->H_data);
+    Matrix_Init(&kf->HT, kf->xhatSize, kf->zSize, (float*)kf->HT_data);
 
     // process noise covariance matrix Q
-    kf->Q_data = (float *)user_malloc(sizeof_float * xhatSize * xhatSize);
-    memset(kf->Q_data, 0, sizeof_float * xhatSize * xhatSize);
-    Matrix_Init(&kf->Q, kf->xhatSize, kf->xhatSize, (float *)kf->Q_data);
+    kf->Q_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * xhatSize);
+    Matrix_Init(&kf->Q, kf->xhatSize, kf->xhatSize, (float*)kf->Q_data);
 
     // measurement noise covariance matrix R
-    kf->R_data = (float *)user_malloc(sizeof_float * zSize * zSize);
-    memset(kf->R_data, 0, sizeof_float * zSize * zSize);
-    Matrix_Init(&kf->R, kf->zSize, kf->zSize, (float *)kf->R_data);
+    kf->R_data = (float*)KalmanAllocZero(kf, sizeof_float * zSize * zSize);
+    Matrix_Init(&kf->R, kf->zSize, kf->zSize, (float*)kf->R_data);
 
     // kalman gain K
-    kf->K_data = (float *)user_malloc(sizeof_float * xhatSize * zSize);
-    memset(kf->K_data, 0, sizeof_float * xhatSize * zSize);
-    Matrix_Init(&kf->K, kf->xhatSize, kf->zSize, (float *)kf->K_data);
+    kf->K_data = (float*)KalmanAllocZero(kf, sizeof_float * xhatSize * zSize);
+    Matrix_Init(&kf->K, kf->xhatSize, kf->zSize, (float*)kf->K_data);
 
-    kf->S_data = (float *)user_malloc(sizeof_float * kf->xhatSize * kf->xhatSize);
-    kf->temp_matrix_data = (float *)user_malloc(sizeof_float * kf->xhatSize * kf->xhatSize);
-    kf->temp_matrix_data1 = (float *)user_malloc(sizeof_float * kf->xhatSize * kf->xhatSize);
-    kf->temp_vector_data = (float *)user_malloc(sizeof_float * kf->xhatSize);
-    kf->temp_vector_data1 = (float *)user_malloc(sizeof_float * kf->xhatSize);
-    Matrix_Init(&kf->S, kf->xhatSize, kf->xhatSize, (float *)kf->S_data);
-    Matrix_Init(&kf->temp_matrix, kf->xhatSize, kf->xhatSize, (float *)kf->temp_matrix_data);
-    Matrix_Init(&kf->temp_matrix1, kf->xhatSize, kf->xhatSize, (float *)kf->temp_matrix_data1);
-    Matrix_Init(&kf->temp_vector, kf->xhatSize, 1, (float *)kf->temp_vector_data);
-    Matrix_Init(&kf->temp_vector1, kf->xhatSize, 1, (float *)kf->temp_vector_data1);
+    // 临时矩阵按 max(xhatSize, zSize) 申请,保证通用KF在量测维度大于状态维度时也不会越界。
+    kf->S_data = (float*)KalmanAllocZero(kf, sizeof_float * zSize * zSize);
+    kf->temp_matrix_data = (float*)KalmanAllocZero(kf, sizeof_float * max_matrix_size * max_matrix_size);
+    kf->temp_matrix_data1 = (float*)KalmanAllocZero(kf, sizeof_float * max_matrix_size * max_matrix_size);
+    kf->temp_vector_data = (float*)KalmanAllocZero(kf, sizeof_float * max_matrix_size);
+    kf->temp_vector_data1 = (float*)KalmanAllocZero(kf, sizeof_float * max_matrix_size);
+    Matrix_Init(&kf->S, kf->zSize, kf->zSize, (float*)kf->S_data);
+    Matrix_Init(&kf->temp_matrix, max_matrix_size, max_matrix_size, (float*)kf->temp_matrix_data);
+    Matrix_Init(&kf->temp_matrix1, max_matrix_size, max_matrix_size, (float*)kf->temp_matrix_data1);
+    Matrix_Init(&kf->temp_vector, max_matrix_size, 1, (float*)kf->temp_vector_data);
+    Matrix_Init(&kf->temp_vector1, max_matrix_size, 1, (float*)kf->temp_vector_data1);
 
     kf->SkipEq1 = 0;
     kf->SkipEq2 = 0;
     kf->SkipEq3 = 0;
     kf->SkipEq4 = 0;
     kf->SkipEq5 = 0;
+
+    if (kf->ErrorCode == KALMAN_FILTER_OK)
+    {
+        kf->Initialized = 1;
+    }
 }
 
-void Kalman_Filter_Measure(KalmanFilter_t *kf)
+void Kalman_Filter_Measure(KalmanFilter_t* kf)
 {
+    if (kf == NULL || kf->Initialized == 0U)
+    {
+        return;
+    }
+
     // 矩阵H K R根据量测情况自动调整
     // matrix H K R auto adjustment
     if (kf->UseAutoAdjustment != 0)
@@ -273,11 +330,19 @@ void Kalman_Filter_Measure(KalmanFilter_t *kf)
         memset(kf->MeasuredVector, 0, sizeof_float * kf->zSize);
     }
 
-    memcpy(kf->u_data, kf->ControlVector, sizeof_float * kf->uSize);
+    if (kf->uSize != 0U)
+    {
+        memcpy(kf->u_data, kf->ControlVector, sizeof_float * kf->uSize);
+    }
 }
 
-void Kalman_Filter_xhatMinusUpdate(KalmanFilter_t *kf)
+void Kalman_Filter_xhatMinusUpdate(KalmanFilter_t* kf)
 {
+    if (kf == NULL || kf->Initialized == 0U)
+    {
+        return;
+    }
+
     if (!kf->SkipEq1)
     {
         if (kf->uSize > 0)
@@ -297,8 +362,13 @@ void Kalman_Filter_xhatMinusUpdate(KalmanFilter_t *kf)
     }
 }
 
-void Kalman_Filter_PminusUpdate(KalmanFilter_t *kf)
+void Kalman_Filter_PminusUpdate(KalmanFilter_t* kf)
 {
+    if (kf == NULL || kf->Initialized == 0U)
+    {
+        return;
+    }
+
     if (!kf->SkipEq2)
     {
         kf->MatStatus = Matrix_Transpose(&kf->F, &kf->FT);
@@ -309,8 +379,14 @@ void Kalman_Filter_PminusUpdate(KalmanFilter_t *kf)
         kf->MatStatus = Matrix_Add(&kf->temp_matrix, &kf->Q, &kf->Pminus);
     }
 }
-void Kalman_Filter_SetK(KalmanFilter_t *kf)
+
+void Kalman_Filter_SetK(KalmanFilter_t* kf)
 {
+    if (kf == NULL || kf->Initialized == 0U)
+    {
+        return;
+    }
+
     if (!kf->SkipEq3)
     {
         kf->MatStatus = Matrix_Transpose(&kf->H, &kf->HT); // z|x => x|z
@@ -323,15 +399,26 @@ void Kalman_Filter_SetK(KalmanFilter_t *kf)
         kf->S.numRows = kf->R.numRows;
         kf->S.numCols = kf->R.numCols;
         kf->MatStatus = Matrix_Add(&kf->temp_matrix1, &kf->R, &kf->S); // S = H P'(k) HT + R
-        kf->MatStatus = Matrix_Inverse(&kf->S, &kf->temp_matrix1);     // temp_matrix1 = inv(H·P'(k)·HT + R)
+        kf->MatStatus = Matrix_Inverse(&kf->S, &kf->temp_matrix1); // temp_matrix1 = inv(H·P'(k)·HT + R)
+        if (kf->MatStatus != ARM_MATH_SUCCESS)
+        {
+            KalmanSetError(kf, KALMAN_FILTER_ERROR_MATRIX_FAILED);
+            return;
+        }
         kf->temp_matrix.numRows = kf->Pminus.numRows;
         kf->temp_matrix.numCols = kf->HT.numCols;
         kf->MatStatus = Matrix_Multiply(&kf->Pminus, &kf->HT, &kf->temp_matrix); // temp_matrix = P'(k)·HT
         kf->MatStatus = Matrix_Multiply(&kf->temp_matrix, &kf->temp_matrix1, &kf->K);
     }
 }
-void Kalman_Filter_xhatUpdate(KalmanFilter_t *kf)
+
+void Kalman_Filter_xhatUpdate(KalmanFilter_t* kf)
 {
+    if (kf == NULL || kf->Initialized == 0U)
+    {
+        return;
+    }
+
     if (!kf->SkipEq4)
     {
         kf->temp_vector.numRows = kf->H.numRows;
@@ -339,35 +426,52 @@ void Kalman_Filter_xhatUpdate(KalmanFilter_t *kf)
         kf->MatStatus = Matrix_Multiply(&kf->H, &kf->xhatminus, &kf->temp_vector); // temp_vector = H xhat'(k)
         kf->temp_vector1.numRows = kf->z.numRows;
         kf->temp_vector1.numCols = 1;
-        kf->MatStatus = Matrix_Subtract(&kf->z, &kf->temp_vector, &kf->temp_vector1); // temp_vector1 = z(k) - H·xhat'(k)
+        kf->MatStatus = Matrix_Subtract(&kf->z, &kf->temp_vector, &kf->temp_vector1);
+        // temp_vector1 = z(k) - H·xhat'(k)
         kf->temp_vector.numRows = kf->K.numRows;
         kf->temp_vector.numCols = 1;
-        kf->MatStatus = Matrix_Multiply(&kf->K, &kf->temp_vector1, &kf->temp_vector); // temp_vector = K(k)·(z(k) - H·xhat'(k))
+        kf->MatStatus = Matrix_Multiply(&kf->K, &kf->temp_vector1, &kf->temp_vector);
+        // temp_vector = K(k)·(z(k) - H·xhat'(k))
         kf->MatStatus = Matrix_Add(&kf->xhatminus, &kf->temp_vector, &kf->xhat);
     }
 }
-void Kalman_Filter_P_Update(KalmanFilter_t *kf)
+
+void Kalman_Filter_P_Update(KalmanFilter_t* kf)
 {
+    if (kf == NULL || kf->Initialized == 0U)
+    {
+        return;
+    }
+
     if (!kf->SkipEq5)
     {
         kf->temp_matrix.numRows = kf->K.numRows;
         kf->temp_matrix.numCols = kf->H.numCols;
         kf->temp_matrix1.numRows = kf->temp_matrix.numRows;
         kf->temp_matrix1.numCols = kf->Pminus.numCols;
-        kf->MatStatus = Matrix_Multiply(&kf->K, &kf->H, &kf->temp_matrix);                 // temp_matrix = K(k)·H
-        kf->MatStatus = Matrix_Multiply(&kf->temp_matrix, &kf->Pminus, &kf->temp_matrix1); // temp_matrix1 = K(k)·H·P'(k)
+        kf->MatStatus = Matrix_Multiply(&kf->K, &kf->H, &kf->temp_matrix); // temp_matrix = K(k)·H
+        kf->MatStatus = Matrix_Multiply(&kf->temp_matrix, &kf->Pminus, &kf->temp_matrix1);
+        // temp_matrix1 = K(k)·H·P'(k)
         kf->MatStatus = Matrix_Subtract(&kf->Pminus, &kf->temp_matrix1, &kf->P);
     }
 }
 
 /**
  * @brief 执行卡尔曼滤波黄金五式,提供了用户定义函数,可以替代五个中的任意一个环节,方便自行扩展为EKF/UKF/ESKF/AUKF等
- * 
+ *
  * @param kf kf类型定义
  * @return float* 返回滤波值
  */
-float *Kalman_Filter_Update(KalmanFilter_t *kf)
+float* Kalman_Filter_Update(KalmanFilter_t* kf)
 {
+    if (kf == NULL || kf->Initialized == 0U)
+    {
+        return NULL;
+    }
+
+    kf->ErrorCode = KALMAN_FILTER_OK;
+    kf->MatStatus = ARM_MATH_SUCCESS;
+
     // 0. 获取量测信息
     Kalman_Filter_Measure(kf);
     if (kf->User_Func0_f != NULL)
@@ -390,9 +494,20 @@ float *Kalman_Filter_Update(KalmanFilter_t *kf)
         // 量测更新
         // 3. K(k) = P'(k)·HT / (H·P'(k)·HT + R)
         Kalman_Filter_SetK(kf);
+        if (kf->MatStatus != ARM_MATH_SUCCESS)
+        {
+            KalmanUsePredictionOnly(kf);
+            return kf->FilteredValue;
+        }
 
         if (kf->User_Func3_f != NULL)
             kf->User_Func3_f(kf);
+        if (kf->MatStatus != ARM_MATH_SUCCESS)
+        {
+            KalmanSetError(kf, KALMAN_FILTER_ERROR_MATRIX_FAILED);
+            KalmanUsePredictionOnly(kf);
+            return kf->FilteredValue;
+        }
 
         // 融合
         // 4. xhat(k) = xhat'(k) + K(k)·(z(k) - H·xhat'(k))
@@ -434,7 +549,7 @@ float *Kalman_Filter_Update(KalmanFilter_t *kf)
     return kf->FilteredValue;
 }
 
-static void H_K_R_Adjustment(KalmanFilter_t *kf)
+static void H_K_R_Adjustment(KalmanFilter_t* kf)
 {
     kf->MeasurementValidNum = 0;
 
@@ -449,13 +564,20 @@ static void H_K_R_Adjustment(KalmanFilter_t *kf)
     {
         if (kf->z_data[i] != 0)
         {
+            uint8_t state_index = kf->MeasurementMap[i];
+            if (state_index == 0U || state_index > kf->xhatSize)
+            {
+                KalmanSetError(kf, KALMAN_FILTER_ERROR_MEASUREMENT_MAP);
+                continue;
+            }
+
             // 重构向量z
             // rebuild vector z
             kf->z_data[kf->MeasurementValidNum] = kf->z_data[i];
             kf->temp[kf->MeasurementValidNum] = i;
             // 重构矩阵H
             // rebuild matrix H
-            kf->H_data[kf->xhatSize * kf->MeasurementValidNum + kf->MeasurementMap[i] - 1] = kf->MeasurementDegree[i];
+            kf->H_data[kf->xhatSize * kf->MeasurementValidNum + state_index - 1U] = kf->MeasurementDegree[i];
             kf->MeasurementValidNum++;
         }
     }
@@ -477,4 +599,43 @@ static void H_K_R_Adjustment(KalmanFilter_t *kf)
     kf->K.numRows = kf->xhatSize;
     kf->K.numCols = kf->MeasurementValidNum;
     kf->z.numRows = kf->MeasurementValidNum;
+}
+
+static void* KalmanAllocZero(KalmanFilter_t* kf, size_t size)
+{
+    if (size == 0U)
+    {
+        return NULL;
+    }
+
+    void* ptr = user_malloc(size);
+    if (ptr == NULL)
+    {
+        KalmanSetError(kf, KALMAN_FILTER_ERROR_ALLOC_FAILED);
+        return NULL;
+    }
+
+    memset(ptr, 0, size);
+    return ptr;
+}
+
+static void KalmanSetError(KalmanFilter_t* kf, KalmanFilterError_e error)
+{
+    if (kf != NULL && kf->ErrorCode == KALMAN_FILTER_OK)
+    {
+        kf->ErrorCode = (uint8_t)error;
+    }
+}
+
+static void KalmanUsePredictionOnly(KalmanFilter_t* kf)
+{
+    if (kf == NULL || kf->FilteredValue == NULL)
+    {
+        return;
+    }
+
+    // 量测更新异常时保留预测结果,避免错误的K或残差污染滤波状态。
+    memcpy(kf->xhat_data, kf->xhatminus_data, sizeof_float * kf->xhatSize);
+    memcpy(kf->P_data, kf->Pminus_data, sizeof_float * kf->xhatSize * kf->xhatSize);
+    memcpy(kf->FilteredValue, kf->xhat_data, sizeof_float * kf->xhatSize);
 }

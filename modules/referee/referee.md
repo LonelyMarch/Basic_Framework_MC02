@@ -1,196 +1,178 @@
-# referee
+# referee（已弃用）
 
-## referee运行流程
+> [!WARNING]
+> `modules/referee` 已弃用。该目录仅保留为历史协议实现参考，不参与当前工程构建，也不会创建裁判系统或 UI
+> 任务。新代码禁止依赖本目录中的头文件、类型和函数；如需重新接入裁判系统，应根据当前赛季官方协议重新设计独立模块。
 
-首先在chassis的初始化中调用裁判系统初始化函数，将要绘制的uidata的指针传递给接口，接口会返回裁判系统的反馈数据指针。然后，在refereeUItask里进行UI初始化，确定ui发送的目标并绘制初始化UI。完成后，uitask会以10hz的频率按顺序更新UI。
+本目录曾用于 RoboMaster 裁判系统串口通信、协议解析、裁判数据缓存、客户端 UI 绘制，以及机器人间自定义交互数据收发。以下内容只描述历史实现，不代表当前工程仍启用这些能力。
 
-## 如何绘制你的自定义UI？以绘制超级电容能量条为例
+## 模块组成
 
-UI的绘制包含初始化和TASK两个部分，初始化部分在`MyUIInit`函数中，TASK部分在`MyUIRefresh`函数中。
+- `rm_referee.c/.h`：裁判系统通信核心。注册 USART BSP，解析裁判系统下发帧，维护 `referee_info_t` 数据快照，并提供交互帧发送队列。
+- `referee_UI.c/.h`：客户端 UI 构帧工具。负责删除图层、绘制图形、绘制字符串，并把 UI 帧投递给 `RefereeSend()`。
+- `referee_task.c/.h`：UI 任务逻辑。负责首次绘制 UI、检测 application 层传入的状态变化，并按需刷新动态 UI。
+- `referee_protocol.h`：裁判系统协议命令码、数据长度、协议结构体和 UI 枚举定义。
+- `crc_ref.c/.h`：裁判系统协议使用的 CRC8/CRC16 校验实现。
 
-### 初始化部分
+## 硬件与 BSP 依赖
 
-初始化部分的UI主要有两个目的：静态UI的绘制、为动态UI的绘制做准备。
+当前工程中裁判系统使用 USART1。CubeMX 与 BSP 侧需要满足：
 
-分析超级电容能量条功能可知，此UI包含如下：
-Power：xxx Power为静态不变的，冒号后的xxx为变化的量。
-方框以及方框内的能量条：方框为静态不变的，能量条为变化的量。（参考游戏血条）
+- USART1 RX DMA 已开启。
+- USART1 TX DMA 已开启。
+- USART1 global interrupt 已开启。
+- `bsp/usart` 已接入 `BSPServiceTask()`，接收回调在任务上下文中执行。
 
-因而，静态UI的绘制包含如下：
-绘制字符“Power:”、绘制矩形方框。
-为动态UI的准备如下：
-绘制矩形方框内的初始能量条、绘制Power的初始值。
+裁判系统接收依赖 `HAL_UARTEx_ReceiveToIdle_DMA()` 的 IDLE 帧结束机制，因此 UART 全局中断必须开启，否则变长帧接收不可靠。
 
-### 绘制字符“Power:”
+## 初始化流程
 
-设置绘制用结构体，此处使用数组是因为需要绘制多个字符。本次绘制的字符为“Power:”，只是用到了第6个，即xxx[5]：
-
-```c
-static String_Data_t UI_State_sta[6];  // 静态
-```
-
-字符格式以及内容设置：
+Application 层在初始化阶段调用 `UITaskInit()`：
 
 ```c
-UICharDraw(&UI_State_sta[5], "ss5", UI_Graph_ADD, 7, UI_Color_Green, 18, 2, 620, 230, "Power:");
+static Referee_Interactive_info_t ui_data;
 
-//各参数意义如下，函数定义中有详细注释：
-        string String_Data类型变量指针，用于存放字符串数据
-        stringname[3]   字符串名称，用于标识更改
-        String_Operate   字符串操作，初始化时一般使用"UI_Graph_ADD"
-        String_Layer    图层0-9
-        String_Color    字符串颜色
-        String_Size     字号
-        String_Width    字符串线宽
-        Start_x、Start_y    开始坐标
-        *stringdata    字符串数据
-
-//设置完毕后，使用“Char_ReFresh”发送即可：
-UICharRefresh(&referee_recv_info->referee_id, UI_State_sta[5]);
-```
-
-### 绘制能量框
-
-定义一个图形类结构体，用于绘制能量框：
-
-```c
-static Graph_Data_t UI_energy_line[3]; // 电容能量条
-```
-
-能量框参数设置以及发送函数：
-
-```c
-UIRectangleDraw(&UI_energy_line[0],"ss6", UI_Graph_ADD, 7, UI_Color_Green,20, 720, 220, 820, 240)
-UIRefresh(&referee_recv_info->referee_id, 1,UI_energy_line[0]);
-```
-
-### 绘制power的初始值
-
-```c
-UIFloatDraw(&UI_Energy[1], "sd5", UI_Graph_ADD, 8, UI_Color_Green, 18, 2, 2, 750, 230, 24000);
-```
-
-### 绘制能量条的初始值
-
-```c
-UILineDraw(&UI_Energy[2], "sd6", UI_Graph_ADD, 8, UI_Color_Pink, 30, 720, 160, 1020, 160);
-```
-
-将两个图形打包发送
-
-```
-UIRefresh(&referee_recv_info->referee_id, 2, UI_Energy[1], UI_Energy[2]);
-```
-
-## TASK部分
-
-task中UI处于动态变化，此时需要检测所画的UI是否发生变化，若发生变化，则刷新对应UI。
-
-### 添加变化检测
-
-绘制功率部分UI，我们需要的是`Chassis_Power_Data_s`中的数据，我们定义`Chassis_Power_Data_s Chassis_Power_Data;`和`Chassis_Power_Data_s Chassis_last_Power_Data;`分别存储此次和上次的对应数据，本次和上次对应检测变化的需求。
-
-```c
-typedef struct
+if (UITaskInit(&huart1, &ui_data) == NULL)
 {
- Referee_Interactive_Flag_t Referee_Interactive_Flag;
- // 为UI绘制以及交互数据所用
- chassis_mode_e chassis_mode;    // 底盘模式
- gimbal_mode_e gimbal_mode;     // 云台模式
- shoot_mode_e shoot_mode;     // 发射模式设置
- friction_mode_e friction_mode;    // 摩擦轮关闭
- lid_mode_e lid_mode;      // 弹舱盖打开
- Chassis_Power_Data_s Chassis_Power_Data; // 功率控制
-
- // 上一次的模式，用于flag判断
- chassis_mode_e chassis_last_mode; 
- gimbal_mode_e gimbal_last_mode;  
- shoot_mode_e shoot_last_mode;  
- friction_mode_e friction_last_mode; 
- lid_mode_e lid_last_mode;   
- Chassis_Power_Data_s Chassis_last_Power_Data;
-
-} Referee_Interactive_info_t;
-```
-
-添加功率变化标志位，`uint32_t Power_flag : 1;`，1为检测到变化，0为未检测到变换
-
-```
-typedef struct
-{
- uint32_t chassis_flag : 1;
- uint32_t gimbal_flag : 1;
- uint32_t shoot_flag : 1;
- uint32_t lid_flag : 1;
- uint32_t friction_flag : 1;
- uint32_t Power_flag : 1;
-} Referee_Interactive_Flag_t;
-```
-
-在变化检测函数中增加对应判断,由于voltage和能量条的变化对应同一个参数`Chassis_last_Power_Data.chassis_power_mx`的变化，所以只需要一个参数即可：
-
-```
-static void UIChangeCheck(Referee_Interactive_info_t *_Interactive_data)
-{
-    if (_Interactive_data->chassis_mode != _Interactive_data->chassis_last_mode)
-    ......
-    ......
-    if (_Interactive_data->lid_mode != _Interactive_data->lid_last_mode)
-    {
-        _Interactive_data->Referee_Interactive_Flag.lid_flag = 1;
-        _Interactive_data->lid_last_mode = _Interactive_data->lid_mode;
-    }
-
-	if (_Interactive_data->Chassis_Power_Data.chassis_power_mx != _Interactive_data->Chassis_last_Power_Data.chassis_power_mx)
-    {
-        _Interactive_data->Referee_Interactive_Flag.Power_flag = 1;
-        _Interactive_data->Chassis_last_Power_Data.chassis_power_mx = _Interactive_data->Chassis_Power_Data.chassis_power_mx;
-    }
+    LOGWARNING("[chassis] referee init failed, UI and referee feedback are disabled");
 }
 ```
 
-### 根据功率的变化绘制UI
+`UITaskInit()` 内部会调用 `RefereeInit()` 完成 USART BSP 注册，并保存 application 层传入的 UI 状态结构体指针。
 
-在绘制变化的UI时，由于初始化时已经使用`UI_Graph_ADD`操作添加了UI，所以在绘制时，需要使用`UI_Graph_Change`操作，以便于刷新UI。
+RTOS 启动后，`StartUITASK()` 会先调用 `MyUIInit()`：
 
-同时，完成UI刷新后，需要将对应的flag置0，以便于下次检测变化
+- 返回 `1U`：已经收到裁判系统 `robot_id`，并且初始 UI 帧全部成功进入发送队列。
+- 返回 `0U`：裁判系统暂未上线，或者初始 UI 帧暂时无法全部入队。后续由 `UITask()` 低频重试。
 
-```
-if (_Interactive_data->Referee_Interactive_Flag.Power_flag == 1)
-{
- UIFloatDraw(&UI_Energy[1], "sd5", UI_Graph_Change, 8, UI_Color_Green, 18, 2, 2, 750, 230, _Interactive_data->Chassis_Power_Data.chassis_power_mx * 1000);
- UILineDraw(&UI_Energy[2], "sd6", UI_Graph_Change, 8, UI_Color_Pink, 30, 720, 160, (uint32_t)750 + _Interactive_data->Chassis_Power_Data.chassis_power_mx * 30, 160);
- UIRefresh(&referee_recv_info->referee_id, 2, UI_Energy[1], UI_Energy[2]);
- _Interactive_data->Referee_Interactive_Flag.Power_flag = 0;
-}
-```
+`StartUITASK()` 进入循环后每 `1ms` 调用一次 `UITask()`。`UITask()` 不会阻塞等待 UI 发送完成，而是每轮先泵一次发送队列，再根据状态决定是否继续初始化或刷新
+UI。
 
----
+## 接收流程
 
-若需要进行多机交互，可增加此函数：
+裁判系统 USART 收到数据后，底层流程如下：
+
+1. USART DMA/IDLE 中断只记录接收长度并唤醒 BSP 服务任务。
+2. `BSPServiceTask()` 调用 `USARTProcess()`。
+3. `USARTProcess()` 在任务上下文执行 referee 的接收回调。
+4. `JudgeReadData()` 在接收 buffer 中扫描裁判系统帧。
+5. 找到 `0xA5` 帧头后校验帧头 CRC8。
+6. 根据帧头中的数据长度计算完整帧长度。
+7. 校验整帧 CRC16。
+8. 根据 `cmd_id` 更新 `referee_info_t` 中对应的数据字段。
+
+`0x0301` 学生机器人交互帧同时承载客户端 UI 和机器人间通信。本模块只把 `data_cmd_id == Communicate_Data_ID` 的数据保存到
+`ReceiveData`，避免把本机发送的 UI 绘图帧误当作自定义通信数据。
+
+## 数据读取
+
+裁判系统内部数据由 USART 解析任务更新。其他任务读取裁判系统数据时，建议使用 `RefereeGet()` 复制快照：
 
 ```c
-void CommBetweenRobotSend(referee_id_t *_id, robot_interactive_data_t *_data)
+referee_info_t referee_snapshot;
+
+if (RefereeGet(&referee_snapshot) != 0U)
 {
- Communicate_SendData_t SendData;
- uint8_t temp_datalength = Interactive_Data_LEN_Head + Communicate_Data_LEN; // 计算交互数据长度  6+n,n为交互数据长度
-
- SendData.FrameHeader.SOF = REFEREE_SOF;
- SendData.FrameHeader.DataLength = temp_datalength;
- SendData.FrameHeader.Seq = UI_Seq;
- SendData.FrameHeader.CRC8 = Get_CRC8_Check_Sum((uint8_t *)&SendData, LEN_CRC8, 0xFF);
-
- SendData.CmdID = ID_student_interactive;
-
- SendData.datahead.data_cmd_id = Communicate_Data_ID;
- SendData.datahead.sender_ID = _id->Robot_ID;
- SendData.datahead.receiver_ID = _id->Receiver_Robot_ID;
-
- SendData.Data = *_data;
-
- SendData.frametail = Get_CRC16_Check_Sum((uint8_t *)&SendData, LEN_HEADER + LEN_CMDID + temp_datalength, 0xFFFF);
-
- RefereeSend((uint8_t *)&SendData, LEN_HEADER + LEN_CMDID + temp_datalength + LEN_TAIL); // 发送
- UI_Seq++;                    // 包序号+1
+    // 使用 referee_snapshot 中的功率、热量、血量、机器人 ID 等数据
 }
 ```
+
+`RefereeGet()` 会在短临界区中复制内部结构体，避免其他任务直接读取内部指针时碰到半更新数据。
+
+`RefereeInit()` 仍返回内部 `referee_info_t *`，主要用于旧代码兼容和 UI 模块内部状态判断。新代码不建议长期保存并跨任务直接读取该指针。
+
+## UI 数据源
+
+`Referee_Interactive_info_t` 是 application 层传给 referee 模块的 UI 状态源，主要包含：
+
+- `chassis_mode`
+- `gimbal_mode`
+- `shoot_mode`
+- `friction_mode`
+- `lid_mode`
+- `Chassis_Power_Data`
+
+referee 模块只负责检测这些字段是否变化，并根据变化刷新客户端 UI。真实机器人状态需要 application 层主动写入该结构体，否则动态
+UI 不会反映实际状态。
+
+## UI 任务逻辑
+
+`UITask()` 的执行顺序如下：
+
+1. 调用 `RefereeTxProcess()`，按裁判系统频率限制发送队列中的下一帧。
+2. 如果 referee 未初始化完成，则直接返回。
+3. 如果初始 UI 尚未绘制完成，则等待 `robot_id`，并按低频重试机制投递初始化 UI 帧。
+4. 初始 UI 完成后，调用 `UIChangeCheck()` 检查 UI 数据源是否发生变化。
+5. 调用 `MyUIRefresh()` 刷新发生变化的动态 UI。
+
+动态 UI 只有在对应刷新帧成功进入发送队列后，才会清除对应 flag。若发送队列暂时满，flag 会保留，后续任务循环继续尝试。
+
+当前 UI 测试逻辑默认关闭。如需让 UI 自动轮换模式用于调试，可在编译时定义：
+
+```c
+#define REFEREE_UI_TEST_ENABLE 1U
+```
+
+## UI 绘制接口
+
+绘制接口分为两类：
+
+- `UILineDraw()`、`UIRectangleDraw()`、`UICircleDraw()`、`UIOvalDraw()`、`UIArcDraw()`、`UIFloatDraw()`、`UIIntDraw()`、
+  `UICharDraw()`：只填充图形或字符串结构体，不发送。
+- `UIDelete()`、`UIGraphRefresh()`、`UICharRefresh()`：构造完整裁判系统交互帧，并投递到 referee 发送队列。
+
+绘制一条线：
+
+```c
+Graph_Data_t line;
+
+UILineDraw(&line, "ln0", UI_Graph_ADD, 7, UI_Color_White, 2, 100, 100, 300, 100);
+(void)UIGraphRefresh(&referee_id, 1, line);
+```
+
+绘制字符串：
+
+```c
+String_Data_t text;
+
+UICharDraw(&text, "tx0", UI_Graph_ADD, 7, UI_Color_Green, 18, 2, 100, 200, "Power:");
+(void)UICharRefresh(&referee_id, text);
+```
+
+`UIDelete()`、`UIGraphRefresh()`、`UICharRefresh()` 返回 `HAL_StatusTypeDef`：
+
+- `HAL_OK`：UI 帧已成功进入发送队列。
+- `HAL_BUSY`：发送队列已满，本帧未入队。
+- `HAL_ERROR`：参数错误或构帧过程失败。
+
+`UIGraphRefresh()` 只支持一次发送 `1`、`2`、`5`、`7` 个图形，这是裁判系统 UI 协议本身的限制。
+
+## 发送队列
+
+裁判系统 `0x0301` 交互数据存在上行频率限制。为了避免 UI 绘制阻塞调用任务，当前模块采用队列化发送：
+
+- `RefereeSend()` 只把一帧交互数据复制到内部发送队列，不直接等待串口发送完成。
+- `RefereeTxProcess()` 在 UI 任务中周期运行，USART 空闲且满足发送间隔时才启动下一帧 DMA 发送。
+
+发送间隔约为 `115ms`。裁判系统交互数据通常按约 `10Hz` 使用，理论间隔为 `100ms`；额外保留一点余量，用来覆盖任务调度抖动和时钟误差，避免实际发送频率超过协议限制。
+
+当前发送队列深度为 `32` 帧。初始 UI 大约会连续投递 15 帧，正常空队列启动时可以容纳。若队列满：
+
+- 初始化 UI 会保持未完成，之后按低频重试。
+- 动态 UI 会保留刷新 flag，等待后续发送队列有空间后继续投递。
+
+## 使用约束
+
+- UI 绘制和刷新接口建议只在 UI 任务中调用。
+- 其他任务需要裁判系统数据时，使用 `RefereeGet()` 获取快照。
+- `Referee_Interactive_info_t` 由 application 层维护，referee 模块不会主动采集底盘、云台、发射机构状态。
+- `RefereeSend()` 面向 UI 与机器人间通信共用，调用者需要检查返回值。
+- 裁判系统 CRC 与 `modules/algorithm` 中的通用 CRC 实现用途不同，不能随意替换。
+- `referee_protocol.h` 中协议结构体按裁判系统协议保持 1 字节对齐；运行期状态结构体不额外强制 pack。
+
+## 当前接入状态
+
+- `CMakeLists.txt` 已移除本目录的源文件和头文件搜索路径。
+- `application/chassis/chassis.c` 已移除裁判系统与 UI 初始化。
+- `application/robot_task.h` 已移除 `StartUITASK()` 及对应线程创建。
+- 当前 APP 不再读取裁判系统数据，也不再发送客户端 UI 或机器人间裁判系统交互数据。

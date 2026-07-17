@@ -46,13 +46,14 @@ typedef struct
  */
 void DWT_Init(uint32_t CPU_Freq_mHz);
 
+
 /**
  * @brief 获取两次调用之间的时间间隔,单位为秒/s
  *
  * @param cnt_last 上一次调用的时间戳
  * @return float 时间间隔,单位为秒/s
  */
-float DWT_GetDeltaT(uint32_t *cnt_last);
+float DWT_GetDeltaT(uint32_t * cnt_last);
 
 /**
  * @brief 获取两次调用之间的时间间隔,单位为秒/s,高精度
@@ -60,7 +61,7 @@ float DWT_GetDeltaT(uint32_t *cnt_last);
  * @param cnt_last 上一次调用的时间戳
  * @return double 时间间隔,单位为秒/s
  */
-double DWT_GetDeltaT64(uint32_t *cnt_last);
+double DWT_GetDeltaT64(uint32_t * cnt_last);
 
 /**
  * @brief 获取当前时间,单位为秒/s,即初始化后的时间
@@ -69,6 +70,7 @@ double DWT_GetDeltaT64(uint32_t *cnt_last);
  */
 float DWT_GetTimeline_s(void);
 
+
 /**
  * @brief 获取当前时间,单位为毫秒/ms,即初始化后的时间
  *
@@ -76,12 +78,14 @@ float DWT_GetTimeline_s(void);
  */
 float DWT_GetTimeline_ms(void);
 
+
 /**
  * @brief 获取当前时间,单位为微秒/us,即初始化后的时间
  *
  * @return uint64_t
  */
 uint64_t DWT_GetTimeline_us(void);
+
 
 /**
  * @brief DWT延时函数,单位为秒/s
@@ -91,6 +95,7 @@ uint64_t DWT_GetTimeline_us(void);
  * @param Delay 延时时间,单位为秒/s
  */
 void DWT_Delay(float Delay);
+
 
 /**
  * @brief DWT时间轴维护函数,用于刷新CYCCNT溢出计数

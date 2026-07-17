@@ -21,15 +21,33 @@ static StaticSemaphore_t qspi_flash_mutex_cb;
 static SemaphoreHandle_t qspi_flash_mutex = NULL;
 static uint8_t qspi_flash_memory_mapped = 0;
 
+
 static int8_t BSP_QSPI_Flash_Lock(uint32_t timeout);
+
+
 static void BSP_QSPI_Flash_Unlock(int8_t lock_state);
+
+
 static int8_t BSP_QSPI_Flash_CheckRange(uint32_t address, uint32_t size);
+
+
 static int8_t BSP_QSPI_Flash_CheckAligned(uint32_t address, uint32_t align);
-static void BSP_QSPI_Flash_FillCommandDefault(OSPI_RegularCmdTypeDef *command);
+
+
+static void BSP_QSPI_Flash_FillCommandDefault(OSPI_RegularCmdTypeDef * command);
+
+
 static int8_t BSP_QSPI_Flash_WriteEnable(void);
+
+
 static int8_t BSP_QSPI_Flash_WaitReady(uint32_t timeout);
+
+
 static int8_t BSP_QSPI_Flash_EraseByCommand(uint32_t address, uint32_t command_code, uint32_t align, uint32_t timeout);
+
+
 static int8_t BSP_QSPI_Flash_ExitMemoryMappedIfNeeded(void);
+
 
 /**
  * @brief 初始化板载外部Flash,通过读取JEDEC ID确认W25Q64通信正常
@@ -115,7 +133,7 @@ uint32_t BSP_QSPI_Flash_ReadID(void)
  * @note 采用官方例程中的0xEB Fast Read Quad I/O命令:
  *       指令阶段1线,地址阶段4线,数据阶段4线,并使用6个dummy cycle。
  */
-int8_t BSP_QSPI_Flash_Read(uint32_t read_addr, uint8_t *buffer, uint32_t size)
+int8_t BSP_QSPI_Flash_Read(uint32_t read_addr, uint8_t* buffer, uint32_t size)
 {
     OSPI_RegularCmdTypeDef command;
     int8_t lock_state;
@@ -178,12 +196,12 @@ int8_t BSP_QSPI_Flash_Read(uint32_t read_addr, uint8_t *buffer, uint32_t size)
  * @note W25Q64页大小为256字节,页编程命令不能跨页。这里先计算当前页剩余空间,
  *       再逐页调用BSP_QSPI_Flash_WritePage()完成连续数据写入。
  */
-int8_t BSP_QSPI_Flash_Write(uint32_t write_addr, const uint8_t *buffer, uint32_t size)
+int8_t BSP_QSPI_Flash_Write(uint32_t write_addr, const uint8_t* buffer, uint32_t size)
 {
     uint32_t current_addr;
     uint32_t current_size;
     uint32_t end_addr;
-    const uint8_t *write_data;
+    const uint8_t* write_data;
     int8_t lock_state;
     int8_t status;
 
@@ -224,8 +242,9 @@ int8_t BSP_QSPI_Flash_Write(uint32_t write_addr, const uint8_t *buffer, uint32_t
 
         current_addr += current_size;
         write_data += current_size;
-        current_size = ((current_addr + BSP_QSPI_FLASH_PAGE_SIZE) > end_addr) ?
-                       (end_addr - current_addr) : BSP_QSPI_FLASH_PAGE_SIZE;
+        current_size = ((current_addr + BSP_QSPI_FLASH_PAGE_SIZE) > end_addr)
+                           ? (end_addr - current_addr)
+                           : BSP_QSPI_FLASH_PAGE_SIZE;
     }
 
     BSP_QSPI_Flash_Unlock(lock_state);
@@ -237,7 +256,7 @@ int8_t BSP_QSPI_Flash_Write(uint32_t write_addr, const uint8_t *buffer, uint32_t
  *
  * @attention 页编程前必须先发送写使能命令,编程结束后必须轮询BUSY位等待Flash内部写入完成。
  */
-int8_t BSP_QSPI_Flash_WritePage(uint32_t write_addr, const uint8_t *buffer, uint16_t size)
+int8_t BSP_QSPI_Flash_WritePage(uint32_t write_addr, const uint8_t* buffer, uint16_t size)
 {
     OSPI_RegularCmdTypeDef command;
     uint32_t page_offset;
@@ -287,7 +306,7 @@ int8_t BSP_QSPI_Flash_WritePage(uint32_t write_addr, const uint8_t *buffer, uint
         return BSP_QSPI_FLASH_ERROR_TRANSMIT;
     }
 
-    if (HAL_OSPI_Transmit(&hospi2, (uint8_t *)buffer, BSP_QSPI_FLASH_DEFAULT_TIMEOUT_MS) != HAL_OK)
+    if (HAL_OSPI_Transmit(&hospi2, (uint8_t*)buffer, BSP_QSPI_FLASH_DEFAULT_TIMEOUT_MS) != HAL_OK)
     {
         LOGERROR("[qspi_flash] write page transmit failed, addr = 0x%X, size = %u", write_addr, size);
         BSP_QSPI_Flash_Unlock(lock_state);
@@ -302,25 +321,25 @@ int8_t BSP_QSPI_Flash_WritePage(uint32_t write_addr, const uint8_t *buffer, uint
 int8_t BSP_QSPI_Flash_EraseSector(uint32_t sector_addr)
 {
     return BSP_QSPI_Flash_EraseByCommand(sector_addr,
-                                          BSP_QSPI_FLASH_CMD_SECTOR_ERASE,
-                                          BSP_QSPI_FLASH_SECTOR_SIZE,
-                                          BSP_QSPI_FLASH_SECTOR_ERASE_TIMEOUT_MS);
+                                         BSP_QSPI_FLASH_CMD_SECTOR_ERASE,
+                                         BSP_QSPI_FLASH_SECTOR_SIZE,
+                                         BSP_QSPI_FLASH_SECTOR_ERASE_TIMEOUT_MS);
 }
 
 int8_t BSP_QSPI_Flash_EraseBlock32K(uint32_t block_addr)
 {
     return BSP_QSPI_Flash_EraseByCommand(block_addr,
-                                          BSP_QSPI_FLASH_CMD_BLOCK_ERASE_32K,
-                                          BSP_QSPI_FLASH_BLOCK_32K_SIZE,
-                                          BSP_QSPI_FLASH_BLOCK_32K_TIMEOUT_MS);
+                                         BSP_QSPI_FLASH_CMD_BLOCK_ERASE_32K,
+                                         BSP_QSPI_FLASH_BLOCK_32K_SIZE,
+                                         BSP_QSPI_FLASH_BLOCK_32K_TIMEOUT_MS);
 }
 
 int8_t BSP_QSPI_Flash_EraseBlock64K(uint32_t block_addr)
 {
     return BSP_QSPI_Flash_EraseByCommand(block_addr,
-                                          BSP_QSPI_FLASH_CMD_BLOCK_ERASE_64K,
-                                          BSP_QSPI_FLASH_BLOCK_64K_SIZE,
-                                          BSP_QSPI_FLASH_BLOCK_64K_TIMEOUT_MS);
+                                         BSP_QSPI_FLASH_CMD_BLOCK_ERASE_64K,
+                                         BSP_QSPI_FLASH_BLOCK_64K_SIZE,
+                                         BSP_QSPI_FLASH_BLOCK_64K_TIMEOUT_MS);
 }
 
 /**
@@ -363,7 +382,7 @@ int8_t BSP_QSPI_Flash_EraseRange(uint32_t erase_addr, uint32_t size)
             remain_size -= BSP_QSPI_FLASH_BLOCK_64K_SIZE;
         }
         else if ((remain_size >= BSP_QSPI_FLASH_BLOCK_32K_SIZE) &&
-                 ((current_addr % BSP_QSPI_FLASH_BLOCK_32K_SIZE) == 0U))
+            ((current_addr % BSP_QSPI_FLASH_BLOCK_32K_SIZE) == 0U))
         {
             status = BSP_QSPI_Flash_EraseBlock32K(current_addr);
             current_addr += BSP_QSPI_FLASH_BLOCK_32K_SIZE;
@@ -585,7 +604,7 @@ static int8_t BSP_QSPI_Flash_CheckAligned(uint32_t address, uint32_t align)
  * @note 官方例程中每个函数都会完整配置OSPI_RegularCmdTypeDef。这里提取公共字段,
  *       每条具体命令再覆盖指令、地址模式、数据线数和数据长度等差异字段。
  */
-static void BSP_QSPI_Flash_FillCommandDefault(OSPI_RegularCmdTypeDef *command)
+static void BSP_QSPI_Flash_FillCommandDefault(OSPI_RegularCmdTypeDef* command)
 {
     memset(command, 0, sizeof(OSPI_RegularCmdTypeDef));
 

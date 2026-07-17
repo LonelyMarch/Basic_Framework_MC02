@@ -27,21 +27,21 @@
  */
 typedef struct
 {
-    I2C_HandleTypeDef *handle;        // 该资源对应的I2C硬件句柄
-    osMutexId_t mutex;                // 同一条I2C总线的互斥锁
-    osSemaphoreId_t complete_sem;     // IT/DMA传输完成信号量
-    HAL_StatusTypeDef last_status;    // 最近一次异步传输结果
-    IICInstance *hold_instance;       // HOLDON序列传输期间持有总线的实例
-    osThreadId_t hold_thread;         // HOLDON序列传输期间持有总线的任务
-    uint8_t *dma_tx_buffer;            // RAM_D2中的DMA发送中转缓冲区
-    uint8_t *dma_rx_buffer;            // RAM_D2中的DMA接收中转缓冲区
+    I2C_HandleTypeDef* handle; // 该资源对应的I2C硬件句柄
+    osMutexId_t mutex; // 同一条I2C总线的互斥锁
+    osSemaphoreId_t complete_sem; // IT/DMA传输完成信号量
+    HAL_StatusTypeDef last_status; // 最近一次异步传输结果
+    IICInstance* hold_instance; // HOLDON序列传输期间持有总线的实例
+    osThreadId_t hold_thread; // HOLDON序列传输期间持有总线的任务
+    uint8_t* dma_tx_buffer; // RAM_D2中的DMA发送中转缓冲区
+    uint8_t* dma_rx_buffer; // RAM_D2中的DMA接收中转缓冲区
     volatile uint8_t os_objects_ready; // mutex/semaphore是否已经完整创建
 } IICBusResource;
 
-static uint8_t idx = 0;     // 已注册的I2C从设备实例数量
+static uint8_t idx = 0; // 已注册的I2C从设备实例数量
 static uint8_t bus_idx = 0; // 已登记的I2C硬件总线数量
 static IICInstance iic_instance_pool[MX_IIC_SLAVE_CNT]; // I2C实例静态池,控制结构体放默认.bss/DTCM
-static IICInstance *iic_instance[MX_IIC_SLAVE_CNT] = {NULL};
+static IICInstance* iic_instance[MX_IIC_SLAVE_CNT] = {NULL};
 static IICBusResource iic_bus[IIC_DEVICE_CNT] = {0};
 
 /*
@@ -54,7 +54,7 @@ static uint8_t iic_dma_rx_buffer[IIC_DEVICE_CNT][IIC_DMA_BOUNCE_BUFFER_SIZE] IIC
 /**
  * @brief 将地址范围扩展到D-Cache line边界
  */
-static void IICAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *aligned_address, int32_t *aligned_size)
+static void IICAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t* aligned_address, int32_t* aligned_size)
 {
     uintptr_t start = address & ~((uintptr_t)IIC_DCACHE_LINE_SIZE - 1U);
     uintptr_t end = (address + size + IIC_DCACHE_LINE_SIZE - 1U) & ~((uintptr_t)IIC_DCACHE_LINE_SIZE - 1U);
@@ -66,7 +66,7 @@ static void IICAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *ali
 /**
  * @brief DMA读取内存前清理D-Cache
  */
-static void IICCleanDCacheByAddr(const void *buffer, uint16_t len)
+static void IICCleanDCacheByAddr(const void* buffer, uint16_t len)
 {
 #if IIC_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -78,7 +78,7 @@ static void IICCleanDCacheByAddr(const void *buffer, uint16_t len)
     }
 
     IICAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_CleanDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_CleanDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     (void)buffer;
     (void)len;
@@ -88,7 +88,7 @@ static void IICCleanDCacheByAddr(const void *buffer, uint16_t len)
 /**
  * @brief DMA写入内存前后失效D-Cache
  */
-static void IICInvalidateDCacheByAddr(const void *buffer, uint16_t len)
+static void IICInvalidateDCacheByAddr(const void* buffer, uint16_t len)
 {
 #if IIC_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -100,7 +100,7 @@ static void IICInvalidateDCacheByAddr(const void *buffer, uint16_t len)
     }
 
     IICAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_InvalidateDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_InvalidateDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     (void)buffer;
     (void)len;
@@ -126,7 +126,7 @@ static HAL_StatusTypeDef IICCheckDmaLength(uint16_t size)
 /**
  * @brief 检查CubeMX是否给当前I2C句柄配置了所需DMA通道
  */
-static HAL_StatusTypeDef IICCheckDmaReady(IICInstance *iic, uint8_t need_tx, uint8_t need_rx)
+static HAL_StatusTypeDef IICCheckDmaReady(IICInstance* iic, uint8_t need_tx, uint8_t need_rx)
 {
     if (iic == NULL || iic->handle == NULL)
     {
@@ -154,7 +154,9 @@ static HAL_StatusTypeDef IICCheckDmaReady(IICInstance *iic, uint8_t need_tx, uin
  * 注册阶段属于系统基础资源初始化。为了保持原框架“初始化失败立即停机”的语义,
  * 这里先打印错误原因,再进入Error_Handler(),避免错误继续扩散到后续业务代码。
  */
-__attribute__((noreturn)) static void IICRegisterErrorHandler(const char *error_msg)
+__attribute__ ((noreturn))
+
+static void IICRegisterErrorHandler(const char* error_msg)
 {
     LOGERROR("[bsp_iic] IIC注册失败: %s", error_msg);
     Error_Handler();
@@ -167,7 +169,7 @@ __attribute__((noreturn)) static void IICRegisterErrorHandler(const char *error_
  * @param handle I2C硬件句柄
  * @return 找到则返回对应资源,否则返回NULL
  */
-static IICBusResource *IICFindBusByHandle(I2C_HandleTypeDef *handle)
+static IICBusResource* IICFindBusByHandle(I2C_HandleTypeDef* handle)
 {
     for (uint8_t i = 0; i < bus_idx; i++)
     {
@@ -189,9 +191,9 @@ static IICBusResource *IICFindBusByHandle(I2C_HandleTypeDef *handle)
  * @param handle I2C硬件句柄
  * @return 对应的总线资源
  */
-static IICBusResource *IICGetOrCreateBus(I2C_HandleTypeDef *handle)
+static IICBusResource* IICGetOrCreateBus(I2C_HandleTypeDef* handle)
 {
-    IICBusResource *bus = IICFindBusByHandle(handle);
+    IICBusResource* bus = IICFindBusByHandle(handle);
     uint8_t new_bus_idx;
 
     if (bus != NULL)
@@ -223,7 +225,7 @@ static IICBusResource *IICGetOrCreateBus(I2C_HandleTypeDef *handle)
  * 当前主要由IICBusOsInit()在osKernelInitialize()之后、任务启动前统一创建。
  * 若后续确实在任务运行期动态注册I2C总线,本函数也会在第一次访问时兜底创建。
  */
-static HAL_StatusTypeDef IICEnsureBusOsObjects(IICBusResource *bus)
+static HAL_StatusTypeDef IICEnsureBusOsObjects(IICBusResource* bus)
 {
     const osMutexAttr_t mutex_attr = {
         .name = "bsp_iic_mutex",
@@ -295,7 +297,8 @@ static HAL_StatusTypeDef IICEnsureBusOsObjects(IICBusResource *bus)
         }
 
         bus->os_objects_ready = 1U;
-    } while (0);
+    }
+    while (0);
 
     if (kernel_lock >= 0)
     {
@@ -323,7 +326,7 @@ HAL_StatusTypeDef IICBusOsInit(void)
  *
  * 发起新的IT/DMA事务前要清掉可能遗留的完成信号,避免立刻误判为本次传输完成。
  */
-static void IICClearCompleteSem(IICBusResource *bus)
+static void IICClearCompleteSem(IICBusResource* bus)
 {
     if (bus == NULL || bus->complete_sem == NULL)
     {
@@ -346,9 +349,9 @@ static void IICClearCompleteSem(IICBusResource *bus)
  * @param seq_mode 序列传输模式
  * @param need_unlock 输出参数,表示本次事务结束后是否需要释放mutex
  */
-static HAL_StatusTypeDef IICLockBus(IICInstance *iic, IIC_Seq_Mode_e seq_mode, uint8_t *need_unlock)
+static HAL_StatusTypeDef IICLockBus(IICInstance* iic, IIC_Seq_Mode_e seq_mode, uint8_t* need_unlock)
 {
-    IICBusResource *bus;
+    IICBusResource* bus;
     osThreadId_t current_thread;
 
     if (iic == NULL || iic->handle == NULL || need_unlock == NULL)
@@ -416,9 +419,9 @@ static HAL_StatusTypeDef IICLockBus(IICInstance *iic, IIC_Seq_Mode_e seq_mode, u
  *
  * 如果HOLDON序列中间出错,必须强制释放总线,否则后续任务会一直等不到mutex。
  */
-static void IICUnlockBus(IICInstance *iic, HAL_StatusTypeDef status, uint8_t need_unlock)
+static void IICUnlockBus(IICInstance* iic, HAL_StatusTypeDef status, uint8_t need_unlock)
 {
-    IICBusResource *bus;
+    IICBusResource* bus;
 
     if (iic == NULL || iic->handle == NULL || osKernelGetState() != osKernelRunning)
     {
@@ -455,9 +458,9 @@ static void IICUnlockBus(IICInstance *iic, HAL_StatusTypeDef status, uint8_t nee
  * 正常完成、错误中断、Abort完成都会释放complete_sem。若等待超时,
  * 主动发起Abort,尽量让HAL状态机回到可再次使用的状态。
  */
-static HAL_StatusTypeDef IICWaitAsyncDone(IICInstance *iic)
+static HAL_StatusTypeDef IICWaitAsyncDone(IICInstance* iic)
 {
-    IICBusResource *bus;
+    IICBusResource* bus;
 
     if (iic == NULL || iic->handle == NULL)
     {
@@ -493,9 +496,9 @@ static HAL_StatusTypeDef IICWaitAsyncDone(IICInstance *iic)
  * HAL的I2C完成/错误回调运行在中断上下文,这里不做日志、不阻塞,
  * 只记录结果并释放信号量。
  */
-static void IICNotifyDone(I2C_HandleTypeDef *hi2c, HAL_StatusTypeDef status)
+static void IICNotifyDone(I2C_HandleTypeDef* hi2c, HAL_StatusTypeDef status)
 {
-    IICBusResource *bus = IICFindBusByHandle(hi2c);
+    IICBusResource* bus = IICFindBusByHandle(hi2c);
     if (bus == NULL || bus->complete_sem == NULL)
     {
         return;
@@ -508,9 +511,9 @@ static void IICNotifyDone(I2C_HandleTypeDef *hi2c, HAL_StatusTypeDef status)
 /**
  * @brief 注册一个I2C从设备实例
  */
-IICInstance *IICRegister(IIC_Init_Config_s *conf)
+IICInstance* IICRegister(IIC_Init_Config_s* conf)
 {
-    IICInstance *instance;
+    IICInstance* instance;
 
     if (conf == NULL)
     {
@@ -548,11 +551,11 @@ IICInstance *IICRegister(IIC_Init_Config_s *conf)
  * BLOCK模式会在HAL阻塞发送完成后返回。IT/DMA模式会发起异步传输,
  * 然后等待HAL完成/错误回调,因此本函数返回时本次事务已经结束。
  */
-HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, IIC_Seq_Mode_e seq_mode)
+HAL_StatusTypeDef IICTransmit(IICInstance* iic, uint8_t* data, uint16_t size, IIC_Seq_Mode_e seq_mode)
 {
     HAL_StatusTypeDef status;
     uint8_t need_unlock = 0;
-    IICBusResource *bus;
+    IICBusResource* bus;
 
     if (iic == NULL || data == NULL || size == 0)
     {
@@ -594,7 +597,9 @@ HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, II
         IICClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
         status = HAL_I2C_Master_Seq_Transmit_IT(iic->handle, iic->dev_address, data, size,
-                                                seq_mode == IIC_SEQ_RELEASE ? I2C_OTHER_AND_LAST_FRAME : I2C_OTHER_FRAME);
+                                                seq_mode == IIC_SEQ_RELEASE
+                                                    ? I2C_OTHER_AND_LAST_FRAME
+                                                    : I2C_OTHER_FRAME);
         if (status == HAL_OK)
         {
             status = IICWaitAsyncDone(iic);
@@ -621,7 +626,9 @@ HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, II
         IICClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
         status = HAL_I2C_Master_Seq_Transmit_DMA(iic->handle, iic->dev_address, bus->dma_tx_buffer, size,
-                                                 seq_mode == IIC_SEQ_RELEASE ? I2C_OTHER_AND_LAST_FRAME : I2C_OTHER_FRAME);
+                                                 seq_mode == IIC_SEQ_RELEASE
+                                                     ? I2C_OTHER_AND_LAST_FRAME
+                                                     : I2C_OTHER_FRAME);
         if (status == HAL_OK)
         {
             status = IICWaitAsyncDone(iic);
@@ -643,11 +650,11 @@ HAL_StatusTypeDef IICTransmit(IICInstance *iic, uint8_t *data, uint16_t size, II
  * 接收成功后会调用注册时传入的callback。BLOCK/IT/DMA模式均在调用者任务上下文
  * 执行callback,HAL完成中断只负责释放完成信号量。
  */
-HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC_Seq_Mode_e seq_mode)
+HAL_StatusTypeDef IICReceive(IICInstance* iic, uint8_t* data, uint16_t size, IIC_Seq_Mode_e seq_mode)
 {
     HAL_StatusTypeDef status;
     uint8_t need_unlock = 0;
-    IICBusResource *bus;
+    IICBusResource* bus;
 
     if (iic == NULL || data == NULL || size == 0)
     {
@@ -692,7 +699,9 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
         IICClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
         status = HAL_I2C_Master_Seq_Receive_IT(iic->handle, iic->dev_address, data, size,
-                                               seq_mode == IIC_SEQ_RELEASE ? I2C_OTHER_AND_LAST_FRAME : I2C_OTHER_FRAME);
+                                               seq_mode == IIC_SEQ_RELEASE
+                                                   ? I2C_OTHER_AND_LAST_FRAME
+                                                   : I2C_OTHER_FRAME);
         if (status == HAL_OK)
         {
             status = IICWaitAsyncDone(iic);
@@ -718,7 +727,9 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
         IICClearCompleteSem(bus);
         bus->last_status = HAL_BUSY;
         status = HAL_I2C_Master_Seq_Receive_DMA(iic->handle, iic->dev_address, bus->dma_rx_buffer, size,
-                                                seq_mode == IIC_SEQ_RELEASE ? I2C_OTHER_AND_LAST_FRAME : I2C_OTHER_FRAME);
+                                                seq_mode == IIC_SEQ_RELEASE
+                                                    ? I2C_OTHER_AND_LAST_FRAME
+                                                    : I2C_OTHER_FRAME);
         if (status == HAL_OK)
         {
             status = IICWaitAsyncDone(iic);
@@ -749,11 +760,12 @@ HAL_StatusTypeDef IICReceive(IICInstance *iic, uint8_t *data, uint16_t size, IIC
  * 根据实例work_mode选择阻塞、IT或DMA形式的HAL Mem接口。该接口本身是一次完整事务,
  * 因此固定以IIC_SEQ_RELEASE方式获取和释放总线。
  */
-HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *data, uint16_t size, IIC_Mem_Mode_e mem_mode, uint8_t mem8bit_flag)
+HAL_StatusTypeDef IICAccessMem(IICInstance* iic, uint16_t mem_addr, uint8_t* data, uint16_t size,
+                               IIC_Mem_Mode_e mem_mode, uint8_t mem8bit_flag)
 {
     HAL_StatusTypeDef status;
     uint8_t need_unlock = 0;
-    IICBusResource *bus;
+    IICBusResource* bus;
     uint16_t bit_flag = mem8bit_flag ? I2C_MEMADD_SIZE_8BIT : I2C_MEMADD_SIZE_16BIT;
     uint8_t should_callback = 0;
 
@@ -788,11 +800,13 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
     case IIC_BLOCK_MODE:
         if (mem_mode == IIC_WRITE_MEM)
         {
-            status = HAL_I2C_Mem_Write(iic->handle, iic->dev_address, mem_addr, bit_flag, data, size, IIC_HAL_TIMEOUT_MS);
+            status = HAL_I2C_Mem_Write(iic->handle, iic->dev_address, mem_addr, bit_flag, data, size,
+                                       IIC_HAL_TIMEOUT_MS);
         }
         else
         {
-            status = HAL_I2C_Mem_Read(iic->handle, iic->dev_address, mem_addr, bit_flag, data, size, IIC_HAL_TIMEOUT_MS);
+            status = HAL_I2C_Mem_Read(iic->handle, iic->dev_address, mem_addr, bit_flag, data, size,
+                                      IIC_HAL_TIMEOUT_MS);
         }
         break;
     case IIC_IT_MODE:
@@ -885,7 +899,7 @@ HAL_StatusTypeDef IICAccessMem(IICInstance *iic, uint16_t mem_addr, uint8_t *dat
 /**
  * @brief HAL I2C发送完成回调
  */
-void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
+void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef* hi2c)
 {
     IICNotifyDone(hi2c, HAL_OK);
 }
@@ -893,7 +907,7 @@ void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
 /**
  * @brief HAL I2C接收完成回调
  */
-void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
+void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef* hi2c)
 {
     IICNotifyDone(hi2c, HAL_OK);
 }
@@ -901,7 +915,7 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 /**
  * @brief HAL I2C内存写完成回调
  */
-void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
+void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef* hi2c)
 {
     IICNotifyDone(hi2c, HAL_OK);
 }
@@ -909,7 +923,7 @@ void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
 /**
  * @brief HAL I2C内存读完成回调
  */
-void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
+void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef* hi2c)
 {
     IICNotifyDone(hi2c, HAL_OK);
 }
@@ -917,7 +931,7 @@ void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 /**
  * @brief HAL I2C错误回调
  */
-void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef* hi2c)
 {
     IICNotifyDone(hi2c, HAL_ERROR);
 }
@@ -925,7 +939,7 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 /**
  * @brief HAL I2C Abort完成回调
  */
-void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef *hi2c)
+void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef* hi2c)
 {
     IICNotifyDone(hi2c, HAL_TIMEOUT);
 }

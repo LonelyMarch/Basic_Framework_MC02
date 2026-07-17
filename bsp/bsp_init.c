@@ -49,7 +49,7 @@ void BSPInit(void)
  *
  * @note 该函数由application层在创建业务任务时调用一次。
  *       此时osKernelInitialize()已经完成,可以创建mutex/semaphore/thread等RTOS对象。
- *       模块业务任务仍然放在application/robot_task.h中创建。
+ *       APP 和模块管理任务由 application/robot_task.c 统一创建。
  */
 void BSPTaskInit(void)
 {

@@ -13,11 +13,11 @@
 
 typedef struct
 {
-    USBRxCallback rx_callback;      // 接收解析回调,在USBProcess()任务上下文执行
-    USBTxCallback tx_callback;      // 发送完成回调,由BSP服务任务在任务上下文执行
-    volatile uint8_t initialized;   // BSP注册完成标志
-    volatile uint8_t tx_busy;       // 发送忙标志,防止上一次USB包未发完时覆盖发送缓冲
-    BSPFrameQueue rx_queue;         // USB接收帧缓存队列,中断写入,任务读取
+    USBRxCallback rx_callback; // 接收解析回调,在USBProcess()任务上下文执行
+    USBTxCallback tx_callback; // 发送完成回调,由BSP服务任务在任务上下文执行
+    volatile uint8_t initialized; // BSP注册完成标志
+    volatile uint8_t tx_busy; // 发送忙标志,防止上一次USB包未发完时覆盖发送缓冲
+    BSPFrameQueue rx_queue; // USB接收帧缓存队列,中断写入,任务读取
 } USBInstance;
 
 static USBInstance usb_instance;
@@ -47,7 +47,7 @@ static uint8_t USBTryAcquireTx(void)
     return acquired;
 }
 
-static void USBDispatchTxCallback(void *arg)
+static void USBDispatchTxCallback(void* arg)
 {
     (void)arg;
 
@@ -66,7 +66,7 @@ static void USBReleaseTx(void)
     __set_PRIMASK(primask);
 }
 
-USBD_StatusTypeDef USBInit(const USB_Init_Config_s *usb_conf)
+USBD_StatusTypeDef USBInit(const USB_Init_Config_s* usb_conf)
 {
     memset(&usb_instance, 0, sizeof(usb_instance));
     memset(usb_tx_buffer, 0, sizeof(usb_tx_buffer));
@@ -97,12 +97,12 @@ uint8_t USBIsReady(void)
     extern USBD_HandleTypeDef hUsbDeviceHS;
 
     return (usb_instance.initialized != 0) &&
-           (usb_instance.tx_busy == 0) &&
-           (hUsbDeviceHS.dev_state == USBD_STATE_CONFIGURED) &&
-           (hUsbDeviceHS.pClassData != NULL);
+        (usb_instance.tx_busy == 0) &&
+        (hUsbDeviceHS.dev_state == USBD_STATE_CONFIGURED) &&
+        (hUsbDeviceHS.pClassData != NULL);
 }
 
-USBD_StatusTypeDef USBTransmit(const uint8_t *buffer, uint16_t len)
+USBD_StatusTypeDef USBTransmit(const uint8_t* buffer, uint16_t len)
 {
     uint8_t status;
 
@@ -137,7 +137,7 @@ USBD_StatusTypeDef USBTransmit(const uint8_t *buffer, uint16_t len)
     return (USBD_StatusTypeDef)status;
 }
 
-USBD_StatusTypeDef USBPrintf(const char *fmt, ...)
+USBD_StatusTypeDef USBPrintf(const char* fmt, ...)
 {
     int len;
     va_list args;
@@ -146,7 +146,7 @@ USBD_StatusTypeDef USBPrintf(const char *fmt, ...)
         return USBD_FAIL;
 
     va_start(args, fmt);
-    len = vsnprintf((char *)usb_printf_buffer, sizeof(usb_printf_buffer), fmt, args);
+    len = vsnprintf((char*)usb_printf_buffer, sizeof(usb_printf_buffer), fmt, args);
     va_end(args);
 
     if (len <= 0)
@@ -160,7 +160,7 @@ USBD_StatusTypeDef USBPrintf(const char *fmt, ...)
 
 void USBProcess(void)
 {
-    uint8_t *recv_buff;
+    uint8_t* recv_buff;
     uint16_t recv_len;
 
     while (BSPFrameQueuePeek(&usb_instance.rx_queue, &recv_buff, &recv_len) != 0U)
@@ -181,7 +181,7 @@ uint8_t USBGetDroppedFrameCount(void)
     return (uint8_t)BSPFrameQueueDroppedCount(&usb_instance.rx_queue);
 }
 
-void USB_CDC_RxCpltCallback(uint8_t *buf, uint32_t len)
+void USB_CDC_RxCpltCallback(uint8_t* buf, uint32_t len)
 {
     uint16_t copy_len;
 

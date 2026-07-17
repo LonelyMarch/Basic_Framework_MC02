@@ -18,20 +18,38 @@
 /* USART服务实例表,所有通过USARTRegister()注册的模块信息都会保存在这里。 */
 static uint8_t idx;
 static USARTInstance usart_instance_pool[DEVICE_USART_CNT]; // USART实例静态池,控制结构体放默认.bss/DTCM
-static USARTInstance *usart_instance[DEVICE_USART_CNT] = {NULL};
+static USARTInstance* usart_instance[DEVICE_USART_CNT] = {NULL};
 
 /*
  * STM32H7的DMA1/DMA2不能访问DTCM,而本工程默认heap/bss在DTCM中。
  * 因此USART的DMA收发缓冲区统一放到链接脚本映射到RAM_D2的.dma_buffer段。
  */
 static uint8_t usart_rx_dma_buffer[DEVICE_USART_CNT][USART_RXBUFF_LIMIT]
-    __attribute__((section(".dma_buffer"), aligned(32)));
+__attribute__ ((section
+(
+".dma_buffer"
+)
+,
+aligned (
+32
+)
+)
+);
 static uint8_t usart_tx_dma_buffer[DEVICE_USART_CNT][USART_TXBUFF_LIMIT]
-    __attribute__((section(".dma_buffer"), aligned(32)));
+__attribute__ ((section
+(
+".dma_buffer"
+)
+,
+aligned (
+32
+)
+)
+);
 static uint8_t usart_parse_buffer[DEVICE_USART_CNT][USART_PARSE_BUFF_CNT][USART_RXBUFF_LIMIT];
 static uint16_t usart_parse_len[DEVICE_USART_CNT][USART_PARSE_BUFF_CNT];
 
-static void USARTAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *aligned_address, int32_t *aligned_size)
+static void USARTAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t* aligned_address, int32_t* aligned_size)
 {
     uintptr_t start = address & ~((uintptr_t)USART_DCACHE_LINE_SIZE - 1U);
     uintptr_t end = (address + size + USART_DCACHE_LINE_SIZE - 1U) & ~((uintptr_t)USART_DCACHE_LINE_SIZE - 1U);
@@ -40,7 +58,7 @@ static void USARTAlignDCacheRange(uintptr_t address, uint32_t size, uintptr_t *a
     *aligned_size = (int32_t)(end - start);
 }
 
-static void USARTCleanDCacheByAddr(const void *buffer, uint16_t len)
+static void USARTCleanDCacheByAddr(const void* buffer, uint16_t len)
 {
 #if USART_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -50,14 +68,14 @@ static void USARTCleanDCacheByAddr(const void *buffer, uint16_t len)
         return;
 
     USARTAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_CleanDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_CleanDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     UNUSED(buffer);
     UNUSED(len);
 #endif
 }
 
-static void USARTInvalidateDCacheByAddr(const void *buffer, uint16_t len)
+static void USARTInvalidateDCacheByAddr(const void* buffer, uint16_t len)
 {
 #if USART_USE_DMA_CACHE_MAINTENANCE
     uintptr_t aligned_address;
@@ -67,14 +85,14 @@ static void USARTInvalidateDCacheByAddr(const void *buffer, uint16_t len)
         return;
 
     USARTAlignDCacheRange((uintptr_t)buffer, len, &aligned_address, &aligned_size);
-    SCB_InvalidateDCache_by_Addr((uint32_t *)aligned_address, aligned_size);
+    SCB_InvalidateDCache_by_Addr((uint32_t*)aligned_address, aligned_size);
 #else
     UNUSED(buffer);
     UNUSED(len);
 #endif
 }
 
-static USARTInstance *USARTFindInstance(UART_HandleTypeDef *huart)
+static USARTInstance* USARTFindInstance(UART_HandleTypeDef* huart)
 {
     for (uint8_t i = 0; i < idx; ++i)
     {
@@ -85,7 +103,7 @@ static USARTInstance *USARTFindInstance(UART_HandleTypeDef *huart)
     return NULL;
 }
 
-static uint8_t USARTTryAcquireTx(USARTInstance *_instance)
+static uint8_t USARTTryAcquireTx(USARTInstance* _instance)
 {
     uint8_t acquired = 0;
     uint32_t primask;
@@ -105,7 +123,7 @@ static uint8_t USARTTryAcquireTx(USARTInstance *_instance)
     return acquired;
 }
 
-static void USARTReleaseTx(USARTInstance *_instance)
+static void USARTReleaseTx(USARTInstance* _instance)
 {
     uint32_t primask;
 
@@ -118,7 +136,7 @@ static void USARTReleaseTx(USARTInstance *_instance)
     __set_PRIMASK(primask);
 }
 
-static void USARTSaveReceivedFrame(USARTInstance *_instance, uint16_t size)
+static void USARTSaveReceivedFrame(USARTInstance* _instance, uint16_t size)
 {
     uint16_t copy_size;
 
@@ -146,7 +164,7 @@ static void USARTSaveReceivedFrame(USARTInstance *_instance, uint16_t size)
     BSPServiceNotify();
 }
 
-static void USARTStartReceive(USARTInstance *_instance)
+static void USARTStartReceive(USARTInstance* _instance)
 {
     HAL_StatusTypeDef status;
 
@@ -163,14 +181,16 @@ static void USARTStartReceive(USARTInstance *_instance)
     {
         // 重新启动DMA接收前失效接收缓冲,避免旧Cache行后续写回覆盖DMA新数据。
         USARTInvalidateDCacheByAddr(_instance->rx_dma_buff, _instance->recv_buff_size);
-        status = HAL_UARTEx_ReceiveToIdle_DMA(_instance->usart_handle, _instance->rx_dma_buff, _instance->recv_buff_size);
+        status = HAL_UARTEx_ReceiveToIdle_DMA(_instance->usart_handle, _instance->rx_dma_buff,
+                                              _instance->recv_buff_size);
         // 关闭DMA半传输中断,避免同一帧数据在半满和IDLE/满传输时被重复回调处理。
         __HAL_DMA_DISABLE_IT(_instance->usart_handle->hdmarx, DMA_IT_HT);
     }
     else
     {
         // 当前UART5没有配置RX DMA,但已经开启UART5全局中断,因此使用IDLE IT模式接收遥控器数据。
-        status = HAL_UARTEx_ReceiveToIdle_IT(_instance->usart_handle, _instance->rx_dma_buff, _instance->recv_buff_size);
+        status = HAL_UARTEx_ReceiveToIdle_IT(_instance->usart_handle, _instance->rx_dma_buff,
+                                             _instance->recv_buff_size);
     }
 
     if (status != HAL_OK)
@@ -194,12 +214,12 @@ static void USARTStartReceive(USARTInstance *_instance)
  *
  * @param _instance instance owned by module,模块拥有的串口实例
  */
-void USARTServiceInit(USARTInstance *_instance)
+void USARTServiceInit(USARTInstance* _instance)
 {
     USARTStartReceive(_instance);
 }
 
-USARTInstance *USARTRegister(USART_Init_Config_s *init_config)
+USARTInstance* USARTRegister(USART_Init_Config_s* init_config)
 {
     if (init_config == NULL || init_config->usart_handle == NULL)
     {
@@ -229,7 +249,7 @@ USARTInstance *USARTRegister(USART_Init_Config_s *init_config)
         }
     }
 
-    USARTInstance *instance = &usart_instance_pool[idx];
+    USARTInstance* instance = &usart_instance_pool[idx];
     memset(instance, 0, sizeof(USARTInstance));
 
     instance->usart_handle = init_config->usart_handle;
@@ -252,7 +272,7 @@ USARTInstance *USARTRegister(USART_Init_Config_s *init_config)
     return instance;
 }
 
-HAL_StatusTypeDef USARTSend(USARTInstance *_instance, uint8_t *send_buf, uint16_t send_size, USART_TRANSFER_MODE mode)
+HAL_StatusTypeDef USARTSend(USARTInstance* _instance, uint8_t* send_buf, uint16_t send_size, USART_TRANSFER_MODE mode)
 {
     HAL_StatusTypeDef status = HAL_OK;
 
@@ -316,9 +336,9 @@ HAL_StatusTypeDef USARTSend(USARTInstance *_instance, uint8_t *send_buf, uint16_
     return status;
 }
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart)
 {
-    USARTInstance *instance = USARTFindInstance(huart);
+    USARTInstance* instance = USARTFindInstance(huart);
 
     if (instance != NULL)
     {
@@ -326,9 +346,9 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
     }
 }
 
-void HAL_UART_AbortCpltCallback(UART_HandleTypeDef *huart)
+void HAL_UART_AbortCpltCallback(UART_HandleTypeDef* huart)
 {
-    USARTInstance *instance = USARTFindInstance(huart);
+    USARTInstance* instance = USARTFindInstance(huart);
 
     if (instance != NULL)
     {
@@ -336,9 +356,9 @@ void HAL_UART_AbortCpltCallback(UART_HandleTypeDef *huart)
     }
 }
 
-void HAL_UART_AbortTransmitCpltCallback(UART_HandleTypeDef *huart)
+void HAL_UART_AbortTransmitCpltCallback(UART_HandleTypeDef* huart)
 {
-    USARTInstance *instance = USARTFindInstance(huart);
+    USARTInstance* instance = USARTFindInstance(huart);
 
     if (instance != NULL)
     {
@@ -347,7 +367,7 @@ void HAL_UART_AbortTransmitCpltCallback(UART_HandleTypeDef *huart)
 }
 
 /* 串口发送时,gstate会被设为BUSY_TX */
-uint8_t USARTIsReady(USARTInstance *_instance)
+uint8_t USARTIsReady(USARTInstance* _instance)
 {
     if (_instance == NULL || _instance->usart_handle == NULL)
         return 0;
@@ -359,7 +379,7 @@ uint8_t USARTIsReady(USARTInstance *_instance)
     return (_instance->tx_busy == 0) && (_instance->usart_handle->gState == HAL_UART_STATE_READY);
 }
 
-uint32_t USARTGetErrorCount(USARTInstance *_instance)
+uint32_t USARTGetErrorCount(USARTInstance* _instance)
 {
     if (_instance == NULL)
         return 0U;
@@ -369,8 +389,8 @@ uint32_t USARTGetErrorCount(USARTInstance *_instance)
 
 void USARTProcess(void)
 {
-    USARTInstance *instance;
-    uint8_t *recv_buff;
+    USARTInstance* instance;
+    uint8_t* recv_buff;
     uint16_t recv_len;
 
     for (uint8_t i = 0; i < idx; ++i)
@@ -411,7 +431,7 @@ void USARTProcess(void)
  * @param huart 发生中断的串口
  * @param Size 此次接收到的数据量
  */
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size)
 {
     for (uint8_t i = 0; i < idx; ++i)
     {
@@ -431,7 +451,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
  *
  * @param huart 发生错误的串口
  */
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart)
 {
     for (uint8_t i = 0; i < idx; ++i)
     {
